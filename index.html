@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Frankfurt Jump & Run – Iteration 4 (App/PWA)</title>
+  <meta name="theme-color" content="#0b0d14" />
+  <style>
+    :root{ --bg:#0b0d14;--panel:#111628;--panel2:#1a2140;--edge:#252e4b;--accent:#79a8ff;--text:#e8eeff; }
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+    #wrap{max-width:1100px;margin:0 auto;padding:12px}
+    header{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:8px}
+    .logo{font-weight:800;letter-spacing:.2px}
+    #hud{display:flex;gap:10px;flex-wrap:wrap;background:var(--panel);border:1px solid var(--edge);padding:8px 12px;border-radius:10px}
+    .badge{background:var(--panel2);border:1px solid var(--edge);padding:4px 10px;border-radius:8px;font-weight:600}
+    #msg{min-height:1.2em;margin-left:6px;opacity:.95}
+
+    #canvasWrap{position:relative}
+    canvas{background:linear-gradient(#14243b,#0c1222 55%);width:100%;height:auto;max-height:70vh;border:1px solid var(--edge);border-radius:12px;display:block}
+
+    /* Dialog */
+    #dialog{position:absolute;left:50%;top:12%;transform:translateX(-50%);width:min(700px,92%);background:#0f1426;border:1px solid #2c365e;border-radius:14px;display:none;box-shadow:0 20px 60px rgba(0,0,0,.5);z-index:5}
+    #dialog header{padding:10px 14px;border-bottom:1px solid #212a4b;font-weight:800}
+    #dialog .content{padding:12px 14px;line-height:1.45}
+    #dialog .choices{display:flex;flex-direction:column;gap:8px;padding:10px 14px 14px}
+    #dialog button{background:#182246;color:#e9ecff;border:1px solid #2d3b70;padding:10px 12px;border-radius:10px;cursor:pointer;text-align:left}
+    #dialog button:hover{background:#1e2a58}
+
+    /* Overlays */
+    .overlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(6,10,20,.72);z-index:6}
+    .panel{background:#0f1426;border:1px solid #2c365e;border-radius:14px;padding:18px 18px 16px;text-align:center;max-width:min(680px,92%)}
+    .panel h1{margin:.2em 0 .2em;font-size:28px}
+    .panel p{opacity:.95}
+    .btnRow{display:flex;gap:10px;justify-content:center;margin-top:10px;flex-wrap:wrap}
+    .btn{background:#182246;color:#e9ecff;border:1px solid #2d3b70;padding:10px 14px;border-radius:10px;cursor:pointer;font-weight:700}
+    .btn.secondary{background:#12182e;border-color:#253462;color:#cdd7ff}
+
+    /* Touch controls */
+    #touch{position:absolute;inset:auto 0 0 0;display:none;align-items:center;justify-content:space-between;gap:12px;padding:10px;z-index:7}
+    .pad{display:flex;gap:10px}
+    .tc{user-select:none;-webkit-user-select:none;touch-action:none;min-width:64px;min-height:64px;border-radius:14px;border:1px solid #2b3a6a;background:rgba(20,30,60,.55);backdrop-filter: blur(4px);color:#e8eeff;font-weight:800;display:flex;align-items:center;justify-content:center}
+    .tc:active{background:rgba(30,46,88,.7)}
+    @media (max-width: 1024px){ #touch{display:flex} }
+
+    /* Inventory panel */
+    #inv{position:absolute;top:10px;left:10px;z-index:4;background:rgba(15,20,38,.65);border:1px solid #2b355a;border-radius:10px;padding:6px 8px;font-size:13px;display:flex;gap:10px}
+    #inv .slot{display:flex;gap:6px;align-items:center}
+    #inv .slot .val{font-weight:700}
+
+    /* Scoreboard */
+    #score{position:absolute;top:10px;right:10px;z-index:4;background:rgba(15,20,38,.65);border:1px solid #2b355a;border-radius:10px;padding:6px 8px;font-size:13px;display:flex;gap:10px}
+
+    /* Audio toggle */
+    #audioBtn{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:4;background:rgba(15,20,38,.65);border:1px solid #2b355a;border-radius:10px;padding:6px 10px;font-size:13px;cursor:pointer}
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <header>
+      <div class="logo">Frankfurt 2D – Hbf ➜ Ostend (It. 4 / App)</div>
+      <div id="hud">
+        <span class="badge" id="money">€ 100</span>
+        <span class="badge" id="karma">Karma: 0</span>
+        <span class="badge" id="zone">Start: Hbf</span>
+      </div>
+    </header>
+    <div id="msg"></div>
+
+    <div id="canvasWrap">
+      <canvas id="game" width="960" height="540"></canvas>
+
+      <!-- Dialog for events -->
+      <div id="dialog" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
+        <header id="dlgTitle">Entscheidung</header>
+        <div class="content" id="dlgText"></div>
+        <div class="choices" id="dlgChoices"></div>
+      </div>
+
+      <!-- Start overlay -->
+      <div id="startOL" class="overlay" style="display:flex">
+        <div class="panel">
+          <h1>Von Hbf bis Ostend</h1>
+          <p>Schaffst du es quer durch Frankfurt – mit genug Geld, Stil und Würde? 😎</p>
+          <p><b>Steuerung:</b> A/← & D/→ laufen · SPACE/W/↑ springen · <b>E</b> interagieren · <b>R</b> Neustart</p>
+          <div class="btnRow">
+            <button class="btn" id="btnStart">Starten</button>
+            <button class="btn secondary" id="btnHow">Was ist neu?</button>
+            <button class="btn secondary" id="btnInstall">Als App installieren</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Game Over / Finish overlay -->
+      <div id="endOL" class="overlay">
+        <div class="panel">
+          <h1 id="endTitle">Geschafft!</h1>
+          <p id="endText">Zusammenfassung</p>
+          <div class="btnRow">
+            <button class="btn" id="btnRestart">Nochmal</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Inventory / Buffs -->
+      <div id="inv">
+        <div class="slot">🎫 Ticket: <span class="val" id="invTicket">Nein</span></div>
+        <div class="slot">⚡: <span class="val" id="invSpeed">–</span></div>
+        <div class="slot">☁️: <span class="val" id="invSlow">–</span></div>
+        <div class="slot">🍏: <span class="val" id="invWobble">–</span></div>
+      </div>
+
+      <!-- Score / Highscore -->
+      <div id="score">
+        <div>⏱ <span id="runTime">0.0s</span></div>
+        <div>🏆 Best: <span id="bestScore">–</span></div>
+      </div>
+
+      <!-- Audio toggle -->
+      <button id="audioBtn">🔊 Audio: aus</button>
+
+      <!-- Touch controls -->
+      <div id="touch">
+        <div class="pad">
+          <div class="tc" id="btnLeft">◀</div>
+          <div class="tc" id="btnRight">▶</div>
+        </div>
+        <div class="pad">
+          <div class="tc" id="btnJump">⤒</div>
+          <div class="tc" id="btnAct">E</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="help">Iteration 4: Musik & SFX • mehr Zufalls-Varianten • Highscore (lokal gespeichert) • PWA: Installierbar & offline-fähig.<br/>Hinweis: „Als App installieren“ funktioniert nur über HTTPS/localhost (z. B. GitHub Pages, Netlify, Vercel).</div>
+  </div>
+
+<script>
+(() => {
+  // ====== Basic Refs ======
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const hudMoney = document.getElementById('money');
+  const hudKarma = document.getElementById('karma');
+  const hudZone  = document.getElementById('zone');
+  const msgEl    = document.getElementById('msg');
+
+  const startOL = document.getElementById('startOL');
+  const endOL   = document.getElementById('endOL');
+  const endTitle= document.getElementById('endTitle');
+  const endText = document.getElementById('endText');
+  const btnStart= document.getElementById('btnStart');
+  const btnHow  = document.getElementById('btnHow');
+  const btnInstall = document.getElementById('btnInstall');
+  const btnRestart = document.getElementById('btnRestart');
+
+  const dialog = document.getElementById('dialog');
+  const dlgText = document.getElementById('dlgText');
+  const dlgChoices = document.getElementById('dlgChoices');
+  const dlgTitle = document.getElementById('dlgTitle');
+
+  const invTicket = document.getElementById('invTicket');
+  const invSpeed  = document.getElementById('invSpeed');
+  const invSlow   = document.getElementById('invSlow');
+  const invWobble = document.getElementById('invWobble');
+
+  const runTimeEl = document.getElementById('runTime');
+  const bestScoreEl = document.getElementById('bestScore');
+  const audioBtn = document.getElementById('audioBtn');
+
+  // ====== Audio (WebAudio: tiny synth) ======
+  let audioOn = false; let audioCtx = null; let musicNode = null; let sfxGain = null; let musGain = null;
+  function initAudio(){
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const master = audioCtx.createGain(); master.gain.value = 0.8; master.connect(audioCtx.destination);
+    sfxGain = audioCtx.createGain(); sfxGain.gain.value = 0.9; sfxGain.connect(master);
+    musGain = audioCtx.createGain(); musGain.gain.value = 0.25; musGain.connect(master);
+  }
+  function playBeep(freq=880, time=0.08){ if(!audioOn) return; const o=audioCtx.createOscillator(); const g=audioCtx.createGain(); o.type='square'; o.frequency.value=freq; o.connect(g); g.connect(sfxGain); const t=audioCtx.currentTime; g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.3,t+0.01); g.gain.exponentialRampToValueAtTime(0.0001,t+time); o.start(t); o.stop(t+time+0.02); }
+  function playCoin(){ playBeep(1400,0.08); }
+  function playJump(){ playBeep(660,0.12); }
+  function playSelect(){ playBeep(520,0.06); }
+  function playLose(){ playBeep(180,0.5); }
+  function playWin(){ playBeep(990,0.3); setTimeout(()=>playBeep(1320,0.25),120); }
+
+  // tiny procedurally generated loop
+  function startMusic(){ if(!audioOn) return; if(musicNode) return; const o=audioCtx.createOscillator(); const g=audioCtx.createGain(); o.type='triangle'; let base=180; let step=0; const sched=()=>{ if(!musicNode) return; const t=audioCtx.currentTime; const notes=[0,3,7,10,12,10,7,3]; const f= base * Math.pow(2, notes[step%notes.length]/12); o.frequency.setValueAtTime(f,t); step++; setTimeout(sched, 350); }; o.connect(g); g.connect(musGain); g.gain.value=0.2; o.start(); musicNode=o; sched(); }
+  function stopMusic(){ if(musicNode){ musicNode.stop(); musicNode.disconnect(); musicNode=null; } }
+
+  audioBtn.addEventListener('click', async ()=>{
+    if(!audioCtx) initAudio();
+    if(!audioOn){ await audioCtx.resume(); audioOn=true; audioBtn.textContent='🔊 Audio: an'; startMusic(); } else { audioOn=false; audioBtn.textContent='🔇 Audio: aus'; stopMusic(); }
+  });
+
+  // ====== Physics / World ======
+  const GRAVITY = 1800; const MOVE_SPEED = 260; const JUMP_VEL = -620;
+  const world = { width: 4400, height: canvas.height, groundY: 460, zones:[{x:0,name:'Hbf & Bahnhofsviertel'},{x:900,name:'Kaiserstraße / Zeil'},{x:1600,name:'Römerberg & Weinfest'},{x:2300,name:'Berger Straße'},{x:3400,name:'Ostend / EZB'}] };
+  const player = { x:60,y:world.groundY-40,w:30,h:40,vx:0,vy:0,onGround:false,money:100,karma:0,animTime:0 };
+  const inventory = { ticket:false };
+
+  // Smooth camera
+  let cameraX = 0; function smoothFollow(target,current,speed,dt){ return current + (target-current)*Math.min(1,speed*dt); }
+
+  const keys = new Set(); let lastTime=0; let frozen=true; let finished=false; let runStartTime=0; let runTimer=0; let best = JSON.parse(localStorage.getItem('ffm_best')||'null');
+  if(best){ bestScoreEl.textContent = `${best.time.toFixed(1)}s • €${best.money} • K${best.karma}`; }
+
+  // Platforms
+  const plats = [
+    {x:0, y: world.groundY, w: 1200, h: 120},
+    {x:1200, y: world.groundY, w: 420, h:120},
+    {x:1650, y: world.groundY, w: 560, h:120},
+    {x:2250, y: world.groundY, w: 520, h:120},
+    {x:2850, y: world.groundY, w: 1400, h:120},
+    {x:980, y: 390, w: 120, h: 18}, {x:1100, y: 340, w: 120, h: 18}, {x:1260, y: 300, w: 120, h: 18},
+  ];
+
+  // Coins
+  const coins = [ {x:300,y:380,v:2},{x:360,y:360,v:1},{x:420,y:340,v:2},{x:1000,y:350,v:1},{x:1120,y:300,v:2},{x:1280,y:260,v:2},{x:1850,y:380,v:1},{x:1920,y:360,v:2},{x:2350,y:420,v:1},{x:2440,y:380,v:2},{x:3050,y:420,v:2},{x:3150,y:380,v:2} ];
+
+  // RNG helpers
+  function rand(min,max){ return Math.random()*(max-min)+min; }
+  function chance(p){ return Math.random()<p; }
+
+  // Build triggers (randomized each run)
+  function buildTriggers(){
+    const t=[];
+    t.push({ id:'beggar', x:620, r:60, sprite:'beggar', text:'Bahnhofsviertel: „Bruder, 4 € nach Gießen… ehrlich!“', choices:[ {label:'4 € geben (Karma++)', fn:()=>{ money(-4); karma(+1); say('Du spendest 4 €. Vielleicht zahlt es sich aus.'); }}, {label:'Höflich ablehnen', fn:()=>{ karma(-1); say('Er murmelt was von „Digitalgeld“…'); }} ] });
+    if(chance(0.55)) t.push({ id:'rmv', x: Math.round(rand(900,1300)), r:60, sprite:'ticket', text:'RMV-Kontrolle: „Fahrkarte, bitte.“', choices:[ {label:'Ticket kaufen (−3 €, Beleg im Inventar)', fn:()=>{ money(-3); inventory.ticket=true; updateInv(); karma(+1); say('Kurzstreckenticket gekauft.'); }}, {label:'Kein Ticket zeigen (−60 €, −Karma)', fn:()=>{ money(-60); karma(-2); say('60 € Strafe – das tat weh.'); }} ] });
+    if(chance(0.7)) t.push({ id:'bembel', x: Math.round(rand(1400,1900)), r:60, sprite:'bembel', text:'Apfelweinstand: „Einer geht immer. 5 €.“', choices:[ {label:'Nehmen (−5 €, 🍏 Wobble 7s)', fn:()=>{ money(-5); wobble(7); say('Huuui. Laufen fühlt sich… kurvig an.'); }}, {label:'Ablehnen', fn:()=>{ say('Du bleibst geradeaus – für jetzt.'); }} ] });
+    t.push({ id:'colleague', x: 1750, r:70, sprite:'wine', text:'Kollege: „Nur EIN Glas auf dem Weinfest – 10 €!“', choices:[ {label:'Mitgehen (−10 €, ⚡ Speed +8s)', fn:()=>{ money(-10); speedBoost(8); say('War nett. Du fühlst dich erstaunlich flink.'); }}, {label:'Ablehnen (sparsam, aber meh)', fn:()=>{ say('Er: „Na gut… nächstes Mal.“ (Sozialdruck −)'); }} ] });
+    t.push({ id:'pigeon', x: Math.round(rand(2000,2200)), r:60, sprite:'pigeon', text:'Taube starrt dich an. „Gib Futter?“', choices:[ {label:'Füttern (−1 €, +Karma)', fn:()=>{ money(-1); karma(+1); say('Taube zufrieden. Du fühlst dich wie Disney‑Royalty.'); }}, {label:'Ignorieren (💩 STARK verschmierte Sicht!)', fn:()=>{ heavySplash(5.2); say('Uff! Sicht stark verschmiert – vorsichtig!'); }} ] });
+    if(chance(0.6)) t.push({ id:'doener', x: Math.round(rand(2350,2650)), r:70, sprite:'doener', text:'Döner 7 €. „Mit alles, Bruder?“', choices:[ {label:'Ja (−7 €, ☁️ SlowFall 8s)', fn:()=>{ money(-7); slowFall(8); say('Satt! Du fällst kontrollierter – Döner‑Physik.'); }}, {label:'Nein, weiter', fn:()=>{ say('Veganer Tag – Respekt.'); }} ] });
+    if(chance(0.45)) t.push({ id:'fan', x: Math.round(rand(2600,3000)), r:70, sprite:'fan', text:'Eintracht-Fan blockiert den Weg. „Schal für 10 €?“', choices:[ {label:'Kaufen (−10 €, +Karma)', fn:()=>{ money(-10); karma(+1); say('„Forza SGE!“ Der Weg ist frei.'); }}, {label:'Vorbeischleichen (−Karma, Speed −3s)', fn:()=>{ karma(-1); speedSlow(3); say('Knapp vorbei. Du hältst kurz den Atem an.'); }} ] });
+    t.push({ id:'cafe', x: 2950, r:70, sprite:'coffee', text:'Café: „Flat White? 15 €.“', choices:[ {label:'Nehmen (−15 €, ☁️ Fokus 6s)', fn:()=>{ if(player.money>=15){ money(-15); slowFall(6); say('Koffein-Klarheit aktiviert.'); } else { endGame(false,'Peinlich: Du konntest den Kaffee nicht zahlen.'); } }}, {label:'Nein', fn:()=>{ say('Du bleibst wachsam – gratis.'); }} ] });
+    t.push({ id:'final', x: 3600, r:90, sprite:'finish', text:'Fast da! Wie zur EZB?', choices:[ {label:'Taxi (−20 €) – easy', fn:()=>{ if(player.money>=20){ money(-20); endGame(true,'Du rollst entspannt vor – der Fahrer erzählt dir Eintracht‑Anekdoten.'); } else say('Nicht genug Geld fürs Taxi.'); }}, {label:'E‑Scooter (−5 €) – ok', fn:()=>{ if(player.money>=5){ money(-5); endGame(true,'Du surrst an der Skyline vorbei. Wind im Gesicht, 5 € weniger.'); } else say('Scooter will Geld. Überraschung.'); }}, {label:'Laufen (0 €) – tricky', fn:()=>{ say('Respekt! Ein letzter Parkour wartet.'); makeFinalGap(); }} ] });
+    t.sort((a,b)=>a.x-b.x); return t;
+  }
+  let triggers = buildTriggers(); const fired = new Set();
+
+  // Buffs & debuffs
+  let speedBoostTimer=0, slowFallTimer=0, wobbleTimer=0, splashTimer=0, slowTimer=0;
+  function speedBoost(sec){ speedBoostTimer=Math.max(speedBoostTimer,sec); updateInv(); }
+  function slowFall(sec){ slowFallTimer=Math.max(slowFallTimer,sec); updateInv(); }
+  function wobble(sec){ wobbleTimer=Math.max(wobbleTimer,sec); updateInv(); }
+  function splash(sec){ splashTimer=Math.max(splashTimer,sec); }
+  function heavySplash(sec){ splashTimer=Math.max(splashTimer,sec*1.6); }
+  function speedSlow(sec){ slowTimer=Math.max(slowTimer,sec); }
+
+  // Input keyboard
+  window.addEventListener('keydown',(e)=>{ const k=e.key.toLowerCase(); if(['arrowleft','arrowright','arrowup',' '].includes(k)) e.preventDefault(); keys.add(k); if(k==='e') tryOpenDialog(); if(k==='r') restart(); if(k==='m') audioBtn.click(); });
+  window.addEventListener('keyup',(e)=> keys.delete(e.key.toLowerCase()));
+
+  // Touch controls
+  const btnLeft=document.getElementById('btnLeft'); const btnRight=document.getElementById('btnRight'); const btnJump=document.getElementById('btnJump'); const btnAct=document.getElementById('btnAct');
+  let tLeft=false,tRight=false,tJump=false;
+  function bindTouch(btn, down, up){ const start=(ev)=>{ ev.preventDefault(); down(); }; const end=(ev)=>{ ev.preventDefault(); up(); }; btn.addEventListener('touchstart',start,{passive:false}); btn.addEventListener('touchend',end,{passive:false}); btn.addEventListener('touchcancel',end,{passive:false}); btn.addEventListener('mousedown',start); window.addEventListener('mouseup',end); }
+  bindTouch(btnLeft, ()=>{tLeft=true;}, ()=>{tLeft=false;}); bindTouch(btnRight, ()=>{tRight=true;}, ()=>{tRight=false;}); bindTouch(btnJump, ()=>{tJump=true; setTimeout(()=>tJump=false,140);}, ()=>{tJump=false;}); bindTouch(btnAct, ()=>{ tryOpenDialog(); }, ()=>{});
+
+  // Start / Info / Restart
+  btnStart.addEventListener('click', ()=>{ start(); });
+  btnHow.addEventListener('click', ()=>{ alert('Neu: Musik & SFX • mehr Zufall • Highscore • App/PWA (installierbar, offline). Tippe auf 🔊 für Audio.'); });
+  btnInstall.addEventListener('click', ()=>{ promptInstall(); });
+  btnRestart.addEventListener('click', ()=>{ endOL.style.display='none'; restart(); });
+
+  function start(){ startOL.style.display='none'; frozen=false; say('Los geht’s! E (oder Button) an Markern für Entscheidungen.'); runStartTime=performance.now(); if(audioOn) startMusic(); }
+
+  // Helpers
+  function money(d){ player.money=Math.max(0, Math.round((player.money+d)*100)/100); hudMoney.textContent=`€ ${player.money}`; playSelect(); }
+  function karma(d){ player.karma+=d; hudKarma.textContent=`Karma: ${player.karma}`; }
+  function say(t){ msgEl.textContent = t; clearTimeout(say._t); say._t = setTimeout(()=> msgEl.textContent = '', 5200); }
+  function zoneHUD(){ const z=world.zones.slice().reverse().find(z=>player.x>=z.x); hudZone.textContent=z?z.name:''; }
+  function updateInv(){ invTicket.textContent = inventory.ticket? 'Ja':'Nein'; invSpeed.textContent = speedBoostTimer>0? `${Math.ceil(speedBoostTimer)}s`:'–'; invSlow.textContent = slowFallTimer>0? `${Math.ceil(slowFallTimer)}s`:'–'; invWobble.textContent = wobbleTimer>0? `${Math.ceil(wobbleTimer)}s`:'–'; }
+  function aabb(a,b){ return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
+
+  function restart(){
+    player.x=60; player.y=world.groundY-40; player.vx=0; player.vy=0; player.onGround=false; player.money=100; player.karma=0; player.animTime=0; cameraX=0; keys.clear(); finished=false; speedBoostTimer=0; slowFallTimer=0; wobbleTimer=0; splashTimer=0; slowTimer=0; msgEl.textContent=''; hudMoney.textContent='€ 100'; hudKarma.textContent='Karma: 0'; zoneHUD(); inventory.ticket=false; updateInv(); fired.clear(); triggers=buildTriggers(); const idx=plats.findIndex(p=>p._finalGap); if(idx>=0) plats.splice(idx,1); frozen=false; startOL.style.display='none'; runStartTime=performance.now(); say('Neustart. Frankfurt wartet.'); if(audioOn && !musicNode) startMusic(); }
+
+  function endGame(win,text){
+    finished=true; frozen=true; endOL.style.display='flex'; endTitle.textContent = win? 'Geschafft!' : 'Game Over';
+    runTimer = (performance.now()-runStartTime)/1000; runTimeEl.textContent = `${runTimer.toFixed(1)}s`;
+    endText.textContent = `${text}\nZeit: ${runTimer.toFixed(1)}s • Geld: €${player.money} • Karma: ${player.karma} • Ticket: ${inventory.ticket? 'Ja':'Nein'}`;
+    if(win){ playWin(); const score={time:runTimer, money:player.money, karma:player.karma}; if(!best || score.time<best.time || (Math.abs(score.time-best.time)<0.01 && (score.money>best.money || score.karma>best.karma))){ best=score; localStorage.setItem('ffm_best', JSON.stringify(best)); bestScoreEl.textContent = `${best.time.toFixed(1)}s • €${best.money} • K${best.karma}`; } }
+    else { playLose(); }
+  }
+
+  function makeFinalGap(){ const gap={x:world.width-360,y:world.groundY,w:180,h:120,_finalGap:true}; plats.push(gap); }
+
+  // Update / Render
+  function update(dt){ if(frozen) return; zoneHUD(); updateInv(); runTimer = (performance.now()-runStartTime)/1000; runTimeEl.textContent = `${runTimer.toFixed(1)}s`;
+    let move=0; if(keys.has('arrowleft')||keys.has('a')||tLeft) move-=1; if(keys.has('arrowright')||keys.has('d')||tRight) move+=1; let speed = MOVE_SPEED + (speedBoostTimer>0?90:0) - (slowTimer>0?80:0); let wobbleAdd=(wobbleTimer>0)? Math.sin(performance.now()/160)*0.8:0; player.vx=(move + wobbleAdd)*speed;
+    const jumpPressed = tJump || keys.has(' ')||keys.has('arrowup')||keys.has('w'); if(jumpPressed && player.onGround){ player.vy=JUMP_VEL; player.onGround=false; playJump(); }
+    const g = GRAVITY * (slowFallTimer>0?0.7:1); player.vy += g*dt; player.x += player.vx*dt; player.y += player.vy*dt;
+    player.onGround=false; for(const p of plats){ const A={x:player.x,y:player.y,w:player.w,h:player.h}; const B=p; if(aabb(A,B)){ const prevY=player.y - player.vy*dt; if(prevY + player.h <= p.y + 4){ player.y=p.y - player.h; player.vy=0; player.onGround=true; } else { if(player.x + player.w/2 < p.x + p.w/2) player.x=p.x - player.w; else player.x=p.x + p.w; player.vx=0; } } }
+    player.x = Math.max(0, Math.min(world.width - player.w, player.x)); if(player.y > canvas.height + 200){ endGame(false,'Du bist in eine Baustelle gefallen. Der Bauzaun sagt: „Betreten verboten.“'); }
+    if(speedBoostTimer>0) speedBoostTimer-=dt; if(speedBoostTimer<0) speedBoostTimer=0; if(slowFallTimer>0) slowFallTimer-=dt; if(slowFallTimer<0) slowFallTimer=0; if(wobbleTimer>0) wobbleTimer-=dt; if(wobbleTimer<0) wobbleTimer=0; if(splashTimer>0) splashTimer-=dt; if(splashTimer<0) splashTimer=0; if(slowTimer>0) slowTimer-=dt; if(slowTimer<0) slowTimer=0;
+    for(let i=coins.length-1;i>=0;i--){ const c=coins[i]; if(Math.abs(player.x-c.x)<24 && Math.abs(player.y-c.y)<36){ money(+c.v); coins.splice(i,1); say(`+€${c.v.toFixed(0)} gefunden.`); playCoin(); } }
+    const lead = 120 * Math.sign(player.vx); const targetCam = Math.max(0, Math.min(world.width - canvas.width, player.x - canvas.width/2 + lead)); cameraX = smoothFollow(targetCam, cameraX, 6.5, dt);
+    const moving = Math.abs(player.vx) > 5; if(moving) player.animTime += dt; else player.animTime = 0;
+  }
+  function render(){ ctx.clearRect(0,0,canvas.width,canvas.height); drawSkyline('#12223a',0.2); drawSkyline('#0f1b2d',0.35); for(const p of plats){ drawRect(p.x - cameraX, p.y, p.w, p.h, '#1b2237'); drawTopEdge(p.x - cameraX, p.y, p.w); } for(const c of coins){ drawCoin(c.x - cameraX, c.y, c.v); } for(const tr of triggers){ const used=fired.has(tr.id); const px=tr.x - cameraX; if(px>-140&&px<canvas.width+140){ drawMarker(px, world.groundY-44, used? '#3a476b':'#6fa2ff'); drawSprite(px-10, world.groundY-54, tr.sprite); } } const goalX = world.width - 40 - cameraX; ctx.fillStyle='#6aa9ff'; ctx.fillRect(goalX, world.groundY-120, 6, 120); for(let i=0;i<8;i++){ ctx.fillRect(goalX-22, world.groundY-120+i*15, 22, 8); } drawPlayer(player.x - cameraX, player.y, player.w, player.h, player.animTime, player.onGround); if(splashTimer>0){ const intensity=Math.min(1, splashTimer/5.2); ctx.save(); ctx.globalAlpha = 0.38 + 0.5*intensity; for(let i=0;i<12;i++){ const rx = canvas.width*rand(0.15,0.9), ry = canvas.height*rand(0.05,0.85), r = rand(50,150); radialSmear(rx, ry, r); } ctx.globalAlpha = 0.45*intensity; vignette(); ctx.restore(); } }
+  function loop(ts){ const t=ts/1000; const dt=Math.min(0.033, t-lastTime||0.016); lastTime=t; update(dt); render(); requestAnimationFrame(loop); }
+
+  // Dialog
+  function tryOpenDialog(){ if(finished) return; for(const tr of triggers){ if(fired.has(tr.id)) continue; if(Math.abs(player.x - tr.x) < tr.r){ openDialog(tr); return; } } }
+  function openDialog(tr){ frozen=true; dialog.style.display='block'; dlgTitle.textContent='Entscheidung'; dlgText.textContent=tr.text; dlgChoices.innerHTML=''; tr.choices.forEach((ch,i)=>{ const b=document.createElement('button'); b.textContent=ch.label; b.onclick=()=>{ ch.fn(); fired.add(tr.id); closeDialog(); }; dlgChoices.appendChild(b); if(i===0) b.focus(); }); playSelect(); }
+  function closeDialog(){ dialog.style.display='none'; if(!finished) frozen=false; }
+
+  // Drawing helpers
+  function drawRect(x,y,w,h,color){ ctx.fillStyle=color; ctx.fillRect(x,y,w,h); }
+  function drawTopEdge(x,y,w){ ctx.fillStyle = '#263152'; ctx.fillRect(x,y-4,w,4); }
+  function drawPlayer(x,y,w,h,anim,onGround){ ctx.fillStyle='#ffd166'; ctx.fillRect(Math.round(x), Math.round(y), w, h); ctx.fillStyle='#fca311'; ctx.fillRect(Math.round(x+6), Math.round(y-12), w-12, 12); ctx.fillStyle='#0c0f14'; ctx.fillRect(Math.round(x+w-14), Math.round(y-9), 4, 4); const moving=Math.abs(player.vx)>5; const phase=Math.floor((anim*10)%2); const legY=y+h; ctx.fillStyle='#87aee8'; if(moving && onGround){ if(phase===0){ ctx.fillRect(Math.round(x+3), Math.round(legY), 10, 6); ctx.fillRect(Math.round(x+w-13), Math.round(legY+2), 10, 6);} else { ctx.fillRect(Math.round(x+3), Math.round(legY+2), 10, 6); ctx.fillRect(Math.round(x+w-13), Math.round(legY), 10, 6);} } else { ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.fillRect(Math.round(x+2), Math.round(legY), w-4, 4); } }
+  function drawCoin(x,y,val){ ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI*2); ctx.closePath(); ctx.fillStyle='#f6d365'; ctx.fill(); ctx.strokeStyle='#b48a2c'; ctx.lineWidth=2; ctx.stroke(); ctx.fillStyle='#2a2110'; ctx.font='10px monospace'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(val, x, y); }
+  function drawMarker(x,y,color){ ctx.fillStyle=color; ctx.fillRect(x-2, y-20, 4, 20); ctx.fillStyle='#9bb7ff'; ctx.fillRect(x-12, y-24, 24, 4); }
+  function drawSkyline(color, parallax){ const offset=-cameraX*parallax; ctx.fillStyle=color; const base=300 + parallax*60; for(let i=0;i<9;i++){ const bx=(i*520 + (offset%520)); const w=120 + (i%3)*40; const h=80 + (i%4)*40; ctx.fillRect(bx, base-h, w, h); ctx.fillRect(bx+w-6, base-h-18, 3, 18); } }
+  function drawSprite(x,y,type){ x=Math.round(x); y=Math.round(y); if(type==='pigeon'){ ctx.fillStyle='#cfd6e0'; ctx.fillRect(x, y, 10, 6); ctx.fillStyle='#a9b3bf'; ctx.fillRect(x+8, y-3, 6, 6); ctx.fillStyle='#ffbf47'; ctx.fillRect(x+14, y, 3, 2);} else if(type==='bembel'){ ctx.fillStyle='#9db4d6'; ctx.fillRect(x, y, 8, 10); ctx.fillRect(x-2, y+2, 2, 6);} else if(type==='ticket'){ ctx.fillStyle='#ffd79a'; ctx.fillRect(x, y, 10, 7); ctx.fillStyle='#caa167'; ctx.fillRect(x+2,y+2,6,3);} else if(type==='wine'){ ctx.fillStyle='#7b001c'; ctx.fillRect(x+2, y+3, 6, 6); ctx.fillStyle='#d1d1d1'; ctx.fillRect(x, y, 10, 4);} else if(type==='doener'){ ctx.fillStyle='#c28b57'; ctx.fillRect(x, y, 8, 10); ctx.fillStyle='#73b86b'; ctx.fillRect(x, y, 8, 3);} else if(type==='fan'){ ctx.fillStyle='#111'; ctx.fillRect(x, y, 10, 10); ctx.fillStyle='#fff'; ctx.fillRect(x, y+4, 10, 2); ctx.fillStyle='#e00'; ctx.fillRect(x, y+6, 10, 2);} else if(type==='finish'){ ctx.fillStyle='#6aa9ff'; ctx.fillRect(x, y, 8, 12);} else if(type==='beggar'){ ctx.fillStyle='#888'; ctx.fillRect(x, y, 8, 12);} else if(type==='coffee'){ ctx.fillStyle='#c7b299'; ctx.fillRect(x, y, 8, 10); ctx.fillStyle='#6b4f35'; ctx.fillRect(x, y+2, 8, 6);} }
+  function radialSmear(cx,cy,r){ const grad=ctx.createRadialGradient(cx,cy,0,cx,cy,r); grad.addColorStop(0,'rgba(245,245,255,0.95)'); grad.addColorStop(1,'rgba(245,245,255,0.0)'); ctx.fillStyle=grad; ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill(); }
+  function vignette(){ const grad=ctx.createRadialGradient(canvas.width/2,canvas.height/2,canvas.width*0.2,canvas.width/2,canvas.height/2,canvas.width*0.7); grad.addColorStop(0,'rgba(0,0,0,0.0)'); grad.addColorStop(1,'rgba(0,0,0,1.0)'); ctx.fillStyle=grad; ctx.fillRect(0,0,canvas.width,canvas.height); }
+
+  // Kickoff
+  requestAnimationFrame(loop); zoneHUD(); updateInv();
+
+  // ====== PWA: manifest + service worker inlined ======
+  let deferredPrompt=null; window.addEventListener('beforeinstallprompt',(e)=>{ e.preventDefault(); deferredPrompt=e; });
+  async function promptInstall(){ if(deferredPrompt){ deferredPrompt.prompt(); const choice=await deferredPrompt.userChoice; deferredPrompt=null; } else { alert('Installation ist verfügbar, wenn die Seite über HTTPS/localhost geöffnet wird.'); } }
+  // Create and attach manifest dynamically
+  const manifest={ name:'FFM Jump & Run', short_name:'FFM JnR', description:'Von Hbf bis Ostend – 2D Jump & Run', display:'standalone', background_color:'#0b0d14', theme_color:'#0b0d14', start_url:'./', icons:[{src:'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 256 256%22><rect width=%22256%22 height=%22256%22 rx=%2248%22 fill=%22%230b0d14%22/><path d=%22M64 168h128v16H64zM88 72h80l24 32H64z%22 fill=%22%2379a8ff%22/></svg>', sizes:'256x256', type:'image/svg+xml'}] };
+  const manBlob=new Blob([JSON.stringify(manifest)],{type:'application/manifest+json'}); const manURL=URL.createObjectURL(manBlob); const link=document.createElement('link'); link.rel='manifest'; link.href=manURL; document.head.appendChild(link);
+  // Service worker (offline cache)
+  const swCode = `const CACHE='ffm-jnr-v1'; self.addEventListener('install',e=>{ e.waitUntil(caches.open(CACHE).then(c=>c.addAll(['./']))); }); self.addEventListener('activate',e=>{ e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k))))); }); self.addEventListener('fetch',e=>{ e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(res=>{ const copy=res.clone(); caches.open(CACHE).then(c=>c.put(e.request, copy)).catch(()=>{}); return res; }))); });`;
+  if('serviceWorker' in navigator){ try{ const blob=new Blob([swCode],{type:'text/javascript'}); const swURL=URL.createObjectURL(blob); navigator.serviceWorker.register(swURL); }catch(e){ /* ignore */ } }
+})();
+</script>
+</body>
+</html>
