@@ -3,16 +3,19 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <title>Frankfurt Jump & Run – Iteration 4.7 (Parallax + Figur + Events)</title>
+  <title>Frankfurt Jump & Run – Iteration 4.7.2 (Clouds Debug)</title>
   <meta name="theme-color" content="#0b0d14" />
   <style>
     body,html{margin:0;padding:0;height:100%;background:#0b0d14;color:#fff;}
     canvas{display:block;margin:0 auto;background:#b0d9ff;width:100%;height:100%;}
     #hud{position:absolute;top:10px;left:10px;z-index:5;background:rgba(0,0,0,0.4);padding:6px 10px;border-radius:8px;font-family:sans-serif}
-    #msg{position:absolute;top:50px;left:10px;z-index:5;font-family:sans-serif;}
+    #msg{position:absolute;top:50px;left:10px;z-index:5;font-family:sans-serif;max-width:min(640px,90vw)}
     #dialog{position:absolute;top:20%;left:50%;transform:translateX(-50%);z-index:10;background:#222;padding:12px;border-radius:12px;display:none;max-width:90%;}
     #dialog .choices{margin-top:10px;display:flex;flex-direction:column;gap:6px;}
     #dialog button{padding:8px 12px;border-radius:8px;background:#444;color:#fff;border:none;cursor:pointer;text-align:left;}
+    #warn{position:absolute;right:10px;top:10px;z-index:6;background:#ffbf00;color:#111;padding:6px 10px;border-radius:8px;font:12px/1.2 system-ui, sans-serif;display:none;max-width:40ch}
+    #warn b{display:block;margin-bottom:4px}
+    a{color:#9bd1ff}
   </style>
 </head>
 <body>
@@ -21,6 +24,7 @@
     <span id="money">€100</span> · <span id="karma">Karma:0</span>
   </div>
   <div id="msg"></div>
+  <div id="warn"></div>
   <div id="dialog">
     <div id="dlgText"></div>
     <div class="choices" id="dlgChoices"></div>
@@ -29,6 +33,7 @@
 (() => {
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
+  const warn = document.getElementById('warn');
 
   // Kamera & Welt
   let cameraX=0;
@@ -37,21 +42,27 @@
   // Spieler
   const player={ x:60,y:world.groundY-56,w:30,h:40,vx:0,vy:0,onGround:false, money:100, karma:0, animTime:0,facing:1 };
 
-  // Sprites laden (eigene Figur)
-  let playerFrames=[new Image(),new Image()];
+  // ===== Asset-Loader =====
+  function loadImg(relPath, onload){
+    const img = new Image();
+    img.onload = ()=>{ console.log('✅ Bild geladen:', relPath, img.naturalWidth+'x'+img.naturalHeight); onload && onload(img); };
+    img.onerror = ()=>{ console.warn('❌ Bild konnte nicht geladen werden:', relPath); };
+    img.src = 'img/' + relPath;
+    return img;
+  }
+
+  // Figur
   let spriteReady=false;
-  playerFrames[0].src='img/sprite1.png';
-  playerFrames[1].src='img/sprite2.png';
-  let loaded=0;
-  playerFrames.forEach(img=>{ img.onload=()=>{loaded++; if(loaded===2) spriteReady=true;}; });
+  const playerFrames=[ loadImg('sprite1.png', checkReady), loadImg('sprite2.png', checkReady) ];
+  function checkReady(){ if(playerFrames[0].complete && playerFrames[1].complete){ spriteReady=true; } }
   const spriteScale=1.6, spriteFootAlign=56;
 
-  // Parallax Layer
-  const bgClouds=new Image(); bgClouds.src='img/clouds.png';
-  const bgSkyline=new Image(); bgSkyline.src='img/skyline.png';
+  // Parallax
+  const bgClouds = loadImg('clouds.png');
+  const bgSkyline = loadImg('skyline.png');
 
-  function drawParallax(img,factor){
-    if(!img.complete||img.naturalWidth===0) return;
+  function drawParallax(img,factor,debug){
+    if(!img.complete || img.naturalWidth===0){ return; }
     const offset=-cameraX*factor;
     const w=img.width,h=img.height;
     const scale=canvas.height/h;
@@ -59,6 +70,11 @@
     if(startX>0) startX-=w*scale;
     for(let x=startX;x<canvas.width;x+=w*scale){
       ctx.drawImage(img,x,0,w*scale,canvas.height);
+      if(debug){
+        ctx.strokeStyle='rgba(200,0,200,0.6)';
+        ctx.lineWidth=3;
+        ctx.strokeRect(x,0,w*scale,canvas.height);
+      }
     }
   }
 
@@ -99,7 +115,7 @@
   // Hilfsfunktionen
   function money(d){player.money+=d;hudMoney.textContent='€'+player.money;}
   function karma(d){player.karma+=d;hudKarma.textContent='Karma:'+player.karma;}
-  function say(t){msgEl.textContent=t;setTimeout(()=>{if(msgEl.textContent===t)msgEl.textContent='';},4000);}
+  function say(t){msgEl.textContent=t;clearTimeout(say._t);say._t=setTimeout(()=>{if(msgEl.textContent===t)msgEl.textContent='';},4200);}
 
   // Eingaben
   const keys=new Set();
@@ -118,7 +134,8 @@
     player.x+=player.vx*dt;player.y+=player.vy*dt;
     if(player.y>world.groundY-56){player.y=world.groundY-56;player.vy=0;player.onGround=true;}
     if(player.vx>0) player.facing=1; else if(player.vx<0) player.facing=-1;
-    cameraX+=(player.x-canvas.width/2-cameraX)*0.1;
+    const target = Math.max(0, Math.min(world.width-canvas.width, player.x-canvas.width/2));
+    cameraX += (target - cameraX) * 0.1;
     checkTriggers();
     if(Math.abs(player.vx)>5) player.animTime+=dt; else player.animTime=0;
   }
@@ -145,14 +162,15 @@
 
   function render(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
-    drawParallax(bgClouds,0.2);
+    // Erst Skyline zeichnen, dann Clouds oben drauf (sichtbarer)
     drawParallax(bgSkyline,0.5);
+    drawParallax(bgClouds,0.2,true); // mit Debug-Rahmen
     ctx.fillStyle='#dcd6c9';ctx.fillRect(0,world.groundY,canvas.width,80);
     drawPlayer(player.x-cameraX,player.y);
   }
 
   let last=0;
-  function loop(ts){const dt=(ts-last)/1000;last=ts;update(dt);render();requestAnimationFrame(loop);} requestAnimationFrame(loop);
+  function loop(ts){const dt=(ts-last)/1000||0;last=ts;update(dt);render();requestAnimationFrame(loop);} requestAnimationFrame(loop);
 })();
 </script>
 </body>
