@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>Frankfurt Jump & Run – Iteration 4.1 (App + Querformat Mobile)</title>
+  <title>Frankfurt Jump & Run – Iteration 4.2 (Auto-Events, App & Querformat)</title>
   <meta name="theme-color" content="#0b0d14" />
   <style>
     :root{ --bg:#0b0d14;--panel:#111628;--panel2:#1a2140;--edge:#252e4b;--accent:#79a8ff;--text:#e8eeff; }
@@ -64,7 +64,7 @@
 <body>
   <div id="wrap">
     <header>
-      <div class="logo">Frankfurt 2D – Hbf ➜ Ostend (It. 4.1)</div>
+      <div class="logo">Frankfurt 2D – Hbf ➜ Ostend (It. 4.2)</div>
       <div id="hud">
         <span class="badge" id="money">€ 100</span>
         <span class="badge" id="karma">Karma: 0</span>
@@ -88,8 +88,8 @@
         <div class="panel">
           <h1>Von Hbf bis Ostend</h1>
           <p>Bitte im <b>Querformat</b> spielen 📱↔️</p>
-          <p><b>Steuerung:</b> A/← & D/→ · SPACE/W/↑ springen · <b>E</b> interagieren · <b>R</b> Neustart
-            <br/>Mobile: Links ◀ ▶ · Rechts ⤒ über E</p>
+          <p><b>Steuerung:</b> A/← & D/→ · SPACE/W/↑ springen · <b>R</b> Neustart
+            <br/>Mobile: Links ◀ ▶ · Rechts ⤒ (Interaktion ist automatisch)</p>
           <div class="btnRow">
             <button class="btn" id="btnStart">Starten</button>
             <button class="btn secondary" id="btnHow">Was ist neu?</button>
@@ -134,7 +134,6 @@
         </div>
         <div id="touchRight" class="pad">
           <div class="tc" id="btnJump">⤒</div>
-          <div class="tc" id="btnAct">E</div>
         </div>
       </div>
 
@@ -152,7 +151,7 @@
   window.addEventListener('orientationchange', checkOrientation);
   checkOrientation();
 
-  // ===== All refs from Iteration 4 kept =====
+  // ===== Refs =====
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
   const hudMoney = document.getElementById('money');
@@ -200,7 +199,7 @@
   function stopMusic(){ if(musicNode){ musicNode.stop(); musicNode.disconnect(); musicNode=null; } }
   audioBtn.addEventListener('click', async ()=>{ if(!audioCtx) initAudio(); if(!audioOn){ await audioCtx.resume(); audioOn=true; audioBtn.textContent='🔊 Audio: an'; startMusic(); } else { audioOn=false; audioBtn.textContent='🔇 Audio: aus'; stopMusic(); } });
 
-  // ===== World =====
+  // ===== World & Player =====
   const GRAVITY = 1800; const MOVE_SPEED = 260; const JUMP_VEL = -620;
   const world = { width: 4400, height: canvas.height, groundY: 460, zones:[{x:0,name:'Hbf & Bahnhofsviertel'},{x:900,name:'Kaiserstraße / Zeil'},{x:1600,name:'Römerberg & Weinfest'},{x:2300,name:'Berger Straße'},{x:3400,name:'Ostend / EZB'}] };
   const player = { x:60,y:world.groundY-40,w:30,h:40,vx:0,vy:0,onGround:false,money:100,karma:0,animTime:0 };
@@ -209,7 +208,8 @@
   // Smooth camera
   let cameraX = 0; function smoothFollow(target,current,speed,dt){ return current + (target-current)*Math.min(1,speed*dt); }
 
-  const keys = new Set(); let lastTime=0; let frozen=true; let finished=false; let runStartTime=0; let runTimer=0; let best = JSON.parse(localStorage.getItem('ffm_best')||'null'); if(best){ bestScoreEl.textContent = `${best.time.toFixed(1)}s • €${best.money} • K${best.karma}`; }
+  const keys = new Set(); let lastTime=0; let frozen=true; let finished=false; let dialogOpen=false;
+  let runStartTime=0; let runTimer=0; let best = JSON.parse(localStorage.getItem('ffm_best')||'null'); if(best){ bestScoreEl.textContent = `${best.time.toFixed(1)}s • €${best.money} • K${best.karma}`; }
 
   // Platforms
   const plats = [ {x:0, y: world.groundY, w: 1200, h: 120}, {x:1200, y: world.groundY, w: 420, h:120}, {x:1650, y: world.groundY, w: 560, h:120}, {x:2250, y: world.groundY, w: 520, h:120}, {x:2850, y: world.groundY, w: 1400, h:120}, {x:980, y: 390, w: 120, h: 18}, {x:1100, y: 340, w: 120, h: 18}, {x:1260, y: 300, w: 120, h: 18} ];
@@ -217,11 +217,11 @@
   // Coins
   const coins = [ {x:300,y:380,v:2},{x:360,y:360,v:1},{x:420,y:340,v:2},{x:1000,y:350,v:1},{x:1120,y:300,v:2},{x:1280,y:260,v:2},{x:1850,y:380,v:1},{x:1920,y:360,v:2},{x:2350,y:420,v:1},{x:2440,y:380,v:2},{x:3050,y:420,v:2},{x:3150,y:380,v:2} ];
 
-  // RNG
+  // RNG helpers
   function rand(min,max){ return Math.random()*(max-min)+min; }
   function chance(p){ return Math.random()<p; }
 
-  // Triggers
+  // Events (randomized each run)
   function buildTriggers(){ const t=[];
     t.push({ id:'beggar', x:620, r:60, sprite:'beggar', text:'Bahnhofsviertel: „Bruder, 4 € nach Gießen… ehrlich!“', choices:[ {label:'4 € geben (Karma++)', fn:()=>{ money(-4); karma(+1); say('Du spendest 4 €. Vielleicht zahlt es sich aus.'); }}, {label:'Höflich ablehnen', fn:()=>{ karma(-1); say('Er murmelt was von „Digitalgeld“…'); }} ] });
     if(chance(0.55)) t.push({ id:'rmv', x: Math.round(rand(900,1300)), r:60, sprite:'ticket', text:'RMV-Kontrolle: „Fahrkarte, bitte.“', choices:[ {label:'Ticket kaufen (−3 €, Beleg im Inventar)', fn:()=>{ money(-3); inventory.ticket=true; updateInv(); karma(+1); say('Kurzstreckenticket gekauft.'); }}, {label:'Kein Ticket zeigen (−60 €, −Karma)', fn:()=>{ money(-60); karma(-2); say('60 € Strafe – das tat weh.'); }} ] });
@@ -244,23 +244,23 @@
   function heavySplash(sec){ splashTimer=Math.max(splashTimer,sec*1.6); }
   function speedSlow(sec){ slowTimer=Math.max(slowTimer,sec); }
 
-  // Input keyboard
-  window.addEventListener('keydown',(e)=>{ const k=e.key.toLowerCase(); if(['arrowleft','arrowright','arrowup',' '].includes(k)) e.preventDefault(); keys.add(k); if(k==='e') tryOpenDialog(); if(k==='r') restart(); if(k==='m') audioBtn.click(); });
+  // Input keyboard (no E needed anymore)
+  window.addEventListener('keydown',(e)=>{ const k=e.key.toLowerCase(); if(['arrowleft','arrowright','arrowup',' '].includes(k)) e.preventDefault(); keys.add(k); if(k==='r') restart(); if(k==='m') audioBtn.click(); });
   window.addEventListener('keyup',(e)=> keys.delete(e.key.toLowerCase()));
 
-  // Touch controls
-  const btnLeft=document.getElementById('btnLeft'); const btnRight=document.getElementById('btnRight'); const btnJump=document.getElementById('btnJump'); const btnAct=document.getElementById('btnAct');
+  // Touch controls (left/right + jump only)
+  const btnLeft=document.getElementById('btnLeft'); const btnRight=document.getElementById('btnRight'); const btnJump=document.getElementById('btnJump');
   let tLeft=false,tRight=false,tJump=false;
   function bindTouch(btn, down, up){ const start=(ev)=>{ ev.preventDefault(); down(); }; const end=(ev)=>{ ev.preventDefault(); up(); }; btn.addEventListener('touchstart',start,{passive:false}); btn.addEventListener('touchend',end,{passive:false}); btn.addEventListener('touchcancel',end,{passive:false}); btn.addEventListener('mousedown',start); window.addEventListener('mouseup',end); }
-  bindTouch(btnLeft, ()=>{tLeft=true;}, ()=>{tLeft=false;}); bindTouch(btnRight, ()=>{tRight=true;}, ()=>{tRight=false;}); bindTouch(btnJump, ()=>{tJump=true; setTimeout(()=>tJump=false,140);}, ()=>{tJump=false;}); bindTouch(btnAct, ()=>{ tryOpenDialog(); }, ()=>{});
+  bindTouch(btnLeft, ()=>{tLeft=true;}, ()=>{tLeft=false;}); bindTouch(btnRight, ()=>{tRight=true;}, ()=>{tRight=false;}); bindTouch(btnJump, ()=>{tJump=true; setTimeout(()=>tJump=false,140);}, ()=>{tJump=false;});
 
   // Start / Info / Install / Restart
   btnStart.addEventListener('click', ()=>{ start(); });
-  btnHow.addEventListener('click', ()=>{ alert('Neu: Querformat-Steuerung • größerer Abstand • weiterhin: Musik & SFX • Zufall • Highscore • App/PWA'); });
+  btnHow.addEventListener('click', ()=>{ alert('Neu: Auto-Events (kein E nötig) • Querformat-Steuerung • weiterhin: Musik & SFX • Zufall • Highscore • App/PWA'); });
   btnInstall.addEventListener('click', ()=>{ promptInstall(); });
   btnRestart.addEventListener('click', ()=>{ endOL.style.display='none'; restart(); });
 
-  function start(){ startOL.style.display='none'; frozen=false; say('Los geht’s! E (oder Button) an Markern für Entscheidungen.'); runStartTime=performance.now(); if(audioOn) startMusic(); }
+  function start(){ startOL.style.display='none'; frozen=false; dialogOpen=false; say('Los geht’s! Ereignisse öffnen automatisch, wenn du nahe dran bist.'); runStartTime=performance.now(); if(audioOn) startMusic(); }
 
   // Helpers
   function money(d){ player.money=Math.max(0, Math.round((player.money+d)*100)/100); hudMoney.textContent=`€ ${player.money}`; playSelect(); }
@@ -270,11 +270,14 @@
   function updateInv(){ invTicket.textContent = inventory.ticket? 'Ja':'Nein'; invSpeed.textContent = speedBoostTimer>0? `${Math.ceil(speedBoostTimer)}s`:'–'; invSlow.textContent = slowFallTimer>0? `${Math.ceil(slowFallTimer)}s`:'–'; invWobble.textContent = wobbleTimer>0? `${Math.ceil(wobbleTimer)}s`:'–'; }
   function aabb(a,b){ return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
 
-  function restart(){ player.x=60; player.y=world.groundY-40; player.vx=0; player.vy=0; player.onGround=false; player.money=100; player.karma=0; player.animTime=0; cameraX=0; keys.clear(); finished=false; speedBoostTimer=0; slowFallTimer=0; wobbleTimer=0; splashTimer=0; slowTimer=0; msgEl.textContent=''; hudMoney.textContent='€ 100'; hudKarma.textContent='Karma: 0'; zoneHUD(); inventory.ticket=false; updateInv(); fired.clear(); triggers=buildTriggers(); const idx=plats.findIndex(p=>p._finalGap); if(idx>=0) plats.splice(idx,1); frozen=false; startOL.style.display='none'; runStartTime=performance.now(); say('Neustart. Frankfurt wartet.'); if(audioOn && !musicNode) startMusic(); }
+  function restart(){ player.x=60; player.y=world.groundY-40; player.vx=0; player.vy=0; player.onGround=false; player.money=100; player.karma=0; player.animTime=0; cameraX=0; keys.clear(); finished=false; dialogOpen=false; speedBoostTimer=0; slowFallTimer=0; wobbleTimer=0; splashTimer=0; slowTimer=0; msgEl.textContent=''; hudMoney.textContent='€ 100'; hudKarma.textContent='Karma: 0'; zoneHUD(); inventory.ticket=false; updateInv(); fired.clear(); triggers=buildTriggers(); const idx=plats.findIndex(p=>p._finalGap); if(idx>=0) plats.splice(idx,1); frozen=false; startOL.style.display='none'; runStartTime=performance.now(); say('Neustart. Frankfurt wartet.'); if(audioOn && !musicNode) startMusic(); }
 
-  function endGame(win,text){ finished=true; frozen=true; endOL.style.display='flex'; endTitle.textContent = win? 'Geschafft!' : 'Game Over'; runTimer = (performance.now()-runStartTime)/1000; runTimeEl.textContent = `${runTimer.toFixed(1)}s`; endText.textContent = `${text}\nZeit: ${runTimer.toFixed(1)}s • Geld: €${player.money} • Karma: ${player.karma} • Ticket: ${inventory.ticket? 'Ja':'Nein'}`; if(win){ playWin(); const score={time:runTimer, money:player.money, karma:player.karma}; let best = JSON.parse(localStorage.getItem('ffm_best')||'null'); if(!best || score.time<best.time || (Math.abs(score.time-best.time)<0.01 && (score.money>best.money || score.karma>best.karma))){ best=score; localStorage.setItem('ffm_best', JSON.stringify(best)); bestScoreEl.textContent = `${best.time.toFixed(1)}s • €${best.money} • K${best.karma}`; } } else { playLose(); } }
+  function endGame(win,text){ finished=true; frozen=true; dialogOpen=false; endOL.style.display='flex'; endTitle.textContent = win? 'Geschafft!' : 'Game Over'; runTimer = (performance.now()-runStartTime)/1000; runTimeEl.textContent = `${runTimer.toFixed(1)}s`; endText.textContent = `${text}\nZeit: ${runTimer.toFixed(1)}s • Geld: €${player.money} • Karma: ${player.karma} • Ticket: ${inventory.ticket? 'Ja':'Nein'}`; if(win){ playWin(); const score={time:runTimer, money:player.money, karma:player.karma}; let best = JSON.parse(localStorage.getItem('ffm_best')||'null'); if(!best || score.time<best.time || (Math.abs(score.time-best.time)<0.01 && (score.money>best.money || score.karma>best.karma))){ best=score; localStorage.setItem('ffm_best', JSON.stringify(best)); bestScoreEl.textContent = `${best.time.toFixed(1)}s • €${best.money} • K${best.karma}`; } } else { playLose(); } }
 
   function makeFinalGap(){ const gap={x:world.width-360,y:world.groundY,w:180,h:120,_finalGap:true}; plats.push(gap); }
+
+  // Auto-Event check
+  function checkAutoTriggers(){ if(finished||dialogOpen) return; for(const tr of triggers){ if(fired.has(tr.id)) continue; if(Math.abs(player.x - tr.x) < tr.r){ openDialog(tr); return; } } }
 
   // Update / Render
   function update(dt){ if(frozen) return; zoneHUD(); updateInv(); runTimer = (performance.now()-runStartTime)/1000; runTimeEl.textContent = `${runTimer.toFixed(1)}s`;
@@ -287,14 +290,17 @@
     for(let i=coins.length-1;i>=0;i--){ const c=coins[i]; if(Math.abs(player.x-c.x)<24 && Math.abs(player.y-c.y)<36){ money(+c.v); coins.splice(i,1); say(`+€${c.v.toFixed(0)} gefunden.`); playCoin(); } }
     const lead = 120 * Math.sign(player.vx); const targetCam = Math.max(0, Math.min(world.width - canvas.width, player.x - canvas.width/2 + lead)); cameraX = smoothFollow(targetCam, cameraX, 6.5, dt);
     const moving = Math.abs(player.vx) > 5; if(moving) player.animTime += dt; else player.animTime = 0;
+
+    // Auto open events after movement & collisions
+    checkAutoTriggers();
   }
+
   function render(){ ctx.clearRect(0,0,canvas.width,canvas.height); drawSkyline('#12223a',0.2); drawSkyline('#0f1b2d',0.35); for(const p of plats){ drawRect(p.x - cameraX, p.y, p.w, p.h, '#1b2237'); drawTopEdge(p.x - cameraX, p.y, p.w); } for(const c of coins){ drawCoin(c.x - cameraX, c.y, c.v); } for(const tr of triggers){ const used=fired.has(tr.id); const px=tr.x - cameraX; if(px>-140&&px<canvas.width+140){ drawMarker(px, world.groundY-44, used? '#3a476b':'#6fa2ff'); drawSprite(px-10, world.groundY-54, tr.sprite); } } const goalX = world.width - 40 - cameraX; ctx.fillStyle='#6aa9ff'; ctx.fillRect(goalX, world.groundY-120, 6, 120); for(let i=0;i<8;i++){ ctx.fillRect(goalX-22, world.groundY-120+i*15, 22, 8); } drawPlayer(player.x - cameraX, player.y, player.w, player.h, player.animTime, player.onGround); if(splashTimer>0){ const intensity=Math.min(1, splashTimer/5.2); ctx.save(); ctx.globalAlpha = 0.38 + 0.5*intensity; for(let i=0;i<12;i++){ const rx = canvas.width*rand(0.15,0.9), ry = canvas.height*rand(0.05,0.85), r = rand(50,150); radialSmear(rx, ry, r); } ctx.globalAlpha = 0.45*intensity; vignette(); ctx.restore(); } }
   function loop(ts){ const t=ts/1000; const dt=Math.min(0.033, t-lastTime||0.016); lastTime=t; update(dt); render(); requestAnimationFrame(loop); }
 
-  // Dialog
-  function tryOpenDialog(){ if(finished) return; for(const tr of triggers){ if(fired.has(tr.id)) continue; if(Math.abs(player.x - tr.x) < tr.r){ openDialog(tr); return; } } }
-  function openDialog(tr){ frozen=true; dialog.style.display='block'; dlgTitle.textContent='Entscheidung'; dlgText.textContent=tr.text; dlgChoices.innerHTML=''; tr.choices.forEach((ch,i)=>{ const b=document.createElement('button'); b.textContent=ch.label; b.onclick=()=>{ ch.fn(); fired.add(tr.id); closeDialog(); }; dlgChoices.appendChild(b); if(i===0) b.focus(); }); playSelect(); }
-  function closeDialog(){ dialog.style.display='none'; if(!finished) frozen=false; }
+  // Dialog (auto-open + freeze movement)
+  function openDialog(tr){ dialogOpen=true; frozen=true; dialog.style.display='block'; dlgTitle.textContent='Entscheidung'; dlgText.textContent=tr.text; dlgChoices.innerHTML=''; tr.choices.forEach((ch,i)=>{ const b=document.createElement('button'); b.textContent=ch.label; b.onclick=()=>{ ch.fn(); fired.add(tr.id); closeDialog(); }; dlgChoices.appendChild(b); if(i===0) b.focus(); }); playSelect(); }
+  function closeDialog(){ dialog.style.display='none'; dialogOpen=false; if(!finished) frozen=false; }
 
   // Drawing helpers
   function drawRect(x,y,w,h,color){ ctx.fillStyle=color; ctx.fillRect(x,y,w,h); }
@@ -304,15 +310,15 @@
   function drawMarker(x,y,color){ ctx.fillStyle=color; ctx.fillRect(x-2, y-20, 4, 20); ctx.fillStyle='#9bb7ff'; ctx.fillRect(x-12, y-24, 24, 4); }
   function drawSkyline(color, parallax){ const offset=-cameraX*parallax; ctx.fillStyle=color; const base=300 + parallax*60; for(let i=0;i<9;i++){ const bx=(i*520 + (offset%520)); const w=120 + (i%3)*40; const h=80 + (i%4)*40; ctx.fillRect(bx, base-h, w, h); ctx.fillRect(bx+w-6, base-h-18, 3, 18); } }
   function drawSprite(x,y,type){ x=Math.round(x); y=Math.round(y); if(type==='pigeon'){ ctx.fillStyle='#cfd6e0'; ctx.fillRect(x, y, 10, 6); ctx.fillStyle='#a9b3bf'; ctx.fillRect(x+8, y-3, 6, 6); ctx.fillStyle='#ffbf47'; ctx.fillRect(x+14, y, 3, 2);} else if(type==='bembel'){ ctx.fillStyle='#9db4d6'; ctx.fillRect(x, y, 8, 10); ctx.fillRect(x-2, y+2, 2, 6);} else if(type==='ticket'){ ctx.fillStyle='#ffd79a'; ctx.fillRect(x, y, 10, 7); ctx.fillStyle='#caa167'; ctx.fillRect(x+2,y+2,6,3);} else if(type==='wine'){ ctx.fillStyle='#7b001c'; ctx.fillRect(x+2, y+3, 6, 6); ctx.fillStyle='#d1d1d1'; ctx.fillRect(x, y, 10, 4);} else if(type==='doener'){ ctx.fillStyle='#c28b57'; ctx.fillRect(x, y, 8, 10); ctx.fillStyle='#73b86b'; ctx.fillRect(x, y, 8, 3);} else if(type==='fan'){ ctx.fillStyle='#111'; ctx.fillRect(x, y, 10, 10); ctx.fillStyle='#fff'; ctx.fillRect(x, y+4, 10, 2); ctx.fillStyle='#e00'; ctx.fillRect(x, y+6, 10, 2);} else if(type==='finish'){ ctx.fillStyle='#6aa9ff'; ctx.fillRect(x, y, 8, 12);} else if(type==='beggar'){ ctx.fillStyle='#888'; ctx.fillRect(x, y, 8, 12);} else if(type==='coffee'){ ctx.fillStyle='#c7b299'; ctx.fillRect(x, y, 8, 10); ctx.fillStyle='#6b4f35'; ctx.fillRect(x, y+2, 8, 6);} }
-  function radialSmear(cx,cy,r){ const grad=ctx.createRadialGradient(cx,cy,0,cx,cy,r); grad.addColorStop(0,'rgba(245,245,255,0.95)'); grad.addColorStop(1,'rgba(245,245,255,0.0)'); ctx.fillStyle=grad; ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill(); }
+  function radialSmear(cx,cy,r){ const grad=ctx.createRadialGradient(cx,cy,0,cx,cy,r); grad.addColorStop(0,'rgba(245,245,255,0.95)') ; grad.addColorStop(1,'rgba(245,245,255,0.0)'); ctx.fillStyle=grad; ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill(); }
   function vignette(){ const grad=ctx.createRadialGradient(canvas.width/2,canvas.height/2,canvas.width*0.2,canvas.width/2,canvas.height/2,canvas.width*0.7); grad.addColorStop(0,'rgba(0,0,0,0.0)'); grad.addColorStop(1,'rgba(0,0,0,1.0)'); ctx.fillStyle=grad; ctx.fillRect(0,0,canvas.width,canvas.height); }
 
   // Kickoff
   requestAnimationFrame(loop); zoneHUD(); updateInv();
 
-  // ===== PWA bits =====
+  // ===== PWA (manifest + service worker) =====
   let deferredPrompt=null; window.addEventListener('beforeinstallprompt',(e)=>{ e.preventDefault(); deferredPrompt=e; });
-  async function promptInstall(){ if(deferredPrompt){ deferredPrompt.prompt(); const choice=await deferredPrompt.userChoice; deferredPrompt=null; } else { alert('Installation ist verfügbar, wenn die Seite über HTTPS/localhost geöffnet wird.'); } }
+  async function promptInstall(){ if(deferredPrompt){ deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt=null; } else { alert('Installation ist verfügbar, wenn die Seite über HTTPS/localhost geöffnet wird.'); } }
   const manifest={ name:'FFM Jump & Run', short_name:'FFM JnR', description:'Von Hbf bis Ostend – 2D Jump & Run', display:'standalone', background_color:'#0b0d14', theme_color:'#0b0d14', start_url:'./', icons:[{src:'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 256 256%22><rect width=%22256%22 height=%22256%22 rx=%2248%22 fill=%22%230b0d14%22/><path d=%22M64 168h128v16H64zM88 72h80l24 32H64z%22 fill=%22%2379a8ff%22/></svg>', sizes:'256x256', type:'image/svg+xml'}] };
   const manBlob=new Blob([JSON.stringify(manifest)],{type:'application/manifest+json'}); const manURL=URL.createObjectURL(manBlob); const link=document.createElement('link'); link.rel='manifest'; link.href=manURL; document.head.appendChild(link);
   const swCode = `const CACHE='ffm-jnr-v1'; self.addEventListener('install',e=>{ e.waitUntil(caches.open(CACHE).then(c=>c.addAll(['./']))); }); self.addEventListener('activate',e=>{ e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k))))); }); self.addEventListener('fetch',e=>{ e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(res=>{ const copy=res.clone(); caches.open(CACHE).then(c=>c.put(e.request, copy)).catch(()=>{}); return res; }))); });`;
