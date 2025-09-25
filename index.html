@@ -3,174 +3,200 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <title>Frankfurt Jump & Run – Iteration 4.7.2 (Clouds Debug)</title>
+  <title>Frankfurt Jump & Run – Iteration 5.0 (Alles vereint)</title>
   <meta name="theme-color" content="#0b0d14" />
   <style>
-    body,html{margin:0;padding:0;height:100%;background:#0b0d14;color:#fff;}
-    canvas{display:block;margin:0 auto;background:#b0d9ff;width:100%;height:100%;}
-    #hud{position:absolute;top:10px;left:10px;z-index:5;background:rgba(0,0,0,0.4);padding:6px 10px;border-radius:8px;font-family:sans-serif}
-    #msg{position:absolute;top:50px;left:10px;z-index:5;font-family:sans-serif;max-width:min(640px,90vw)}
-    #dialog{position:absolute;top:20%;left:50%;transform:translateX(-50%);z-index:10;background:#222;padding:12px;border-radius:12px;display:none;max-width:90%;}
-    #dialog .choices{margin-top:10px;display:flex;flex-direction:column;gap:6px;}
-    #dialog button{padding:8px 12px;border-radius:8px;background:#444;color:#fff;border:none;cursor:pointer;text-align:left;}
-    #warn{position:absolute;right:10px;top:10px;z-index:6;background:#ffbf00;color:#111;padding:6px 10px;border-radius:8px;font:12px/1.2 system-ui, sans-serif;display:none;max-width:40ch}
-    #warn b{display:block;margin-bottom:4px}
-    a{color:#9bd1ff}
+    :root{
+      --bg:#0b0d14;--text:#e8eeff;--hud:#0a0f1e;--hudb:#263355;--accent:#ffd24d;
+    }
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--text);height:100%;font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+    #wrap{position:relative;height:100%}
+    canvas{display:block;width:100%;height:100%;background:#bfe6ff}
+    /* HUD */
+    #hud{position:absolute;left:12px;top:12px;z-index:5;display:flex;gap:10px;align-items:center;background:rgba(10,15,30,.6);border:1px solid var(--hudb);border-radius:10px;padding:6px 10px}
+    #hud .badge{background:rgba(20,30,55,.7);border:1px solid #30426f;padding:4px 8px;border-radius:8px;font-weight:700}
+    #msg{position:absolute;left:12px;top:56px;z-index:5;max-width:min(640px,92vw)}
+    /* Dialog */
+    #dialog{position:absolute;left:50%;top:18%;transform:translateX(-50%);z-index:10;background:#0f152a;border:1px solid #2b3f72;border-radius:12px;display:none;max-width:min(760px,92vw)}
+    #dialog header{padding:10px 14px;border-bottom:1px solid #22335c;font-weight:800}
+    #dialog .content{padding:12px 14px;line-height:1.45}
+    #dialog .choices{padding:0 14px 14px;display:flex;flex-direction:column;gap:8px}
+    #dialog button{background:#182246;color:#e9ecff;border:1px solid #2d3b70;padding:10px 12px;border-radius:10px;cursor:pointer;text-align:left}
+    #dialog button:hover{background:#1f2b57}
+    /* Zone label */
+    #zone{position:absolute;right:12px;top:12px;z-index:5;background:rgba(10,15,30,.6);border:1px solid var(--hudb);border-radius:10px;padding:6px 10px}
   </style>
 </head>
 <body>
-  <canvas id="game" width="960" height="540"></canvas>
-  <div id="hud">
-    <span id="money">€100</span> · <span id="karma">Karma:0</span>
+  <div id="wrap">
+    <canvas id="game" width="960" height="540"></canvas>
+    <div id="hud">
+      <span class="badge" id="money">€ 100</span>
+      <span class="badge" id="karma">Karma: 0</span>
+    </div>
+    <div id="zone">Start: Hbf</div>
+    <div id="msg"></div>
+
+    <div id="dialog" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
+      <header id="dlgTitle">Entscheidung</header>
+      <div class="content" id="dlgText"></div>
+      <div class="choices" id="dlgChoices"></div>
+    </div>
   </div>
-  <div id="msg"></div>
-  <div id="warn"></div>
-  <div id="dialog">
-    <div id="dlgText"></div>
-    <div class="choices" id="dlgChoices"></div>
-  </div>
+
 <script>
 (() => {
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
-  const warn = document.getElementById('warn');
+  const hudMoney = document.getElementById('money');
+  const hudKarma = document.getElementById('karma');
+  const zoneEl   = document.getElementById('zone');
+  const msgEl    = document.getElementById('msg');
 
-  // Kamera & Welt
-  let cameraX=0;
-  const world={ width:4400,height:540, groundY:460 };
+  // ===== Welt & Kamera =====
+  const world = {
+    width: 4400,
+    height: canvas.height,
+    groundY: 460,
+    zones:[
+      {x:0, name:'Hbf & Bahnhofsviertel'},
+      {x:900, name:'Kaiserstraße / Zeil'},
+      {x:1600, name:'Römerberg & Weinfest'},
+      {x:2300, name:'Berger Straße'},
+      {x:3400, name:'Ostend / EZB'}
+    ]
+  };
+  let cameraX = 0;
 
-  // Spieler
-  const player={ x:60,y:world.groundY-56,w:30,h:40,vx:0,vy:0,onGround:false, money:100, karma:0, animTime:0,facing:1 };
+  // ===== Spieler (mit benutzer-Sprites) =====
+  const player = { x:60,y:world.groundY-56,w:30,h:40,vx:0,vy:0,onGround:false, money:100, karma:0, animTime:0,facing:1 };
+  const sprite = { frames:[new Image(), new Image()], ready:false, scale:1.6, foot:56 };
+  let loaded=0; ['sprite1.png','sprite2.png'].forEach((n,i)=>{ const img=sprite.frames[i]; img.onload=()=>{loaded++; if(loaded===2) sprite.ready=true;}; img.onerror=()=>console.warn('Sprite fehlt:', 'img/'+n); img.src='img/'+n; });
 
-  // ===== Asset-Loader =====
-  function loadImg(relPath, onload){
-    const img = new Image();
-    img.onload = ()=>{ console.log('✅ Bild geladen:', relPath, img.naturalWidth+'x'+img.naturalHeight); onload && onload(img); };
-    img.onerror = ()=>{ console.warn('❌ Bild konnte nicht geladen werden:', relPath); };
-    img.src = 'img/' + relPath;
-    return img;
-  }
-
-  // Figur
-  let spriteReady=false;
-  const playerFrames=[ loadImg('sprite1.png', checkReady), loadImg('sprite2.png', checkReady) ];
-  function checkReady(){ if(playerFrames[0].complete && playerFrames[1].complete){ spriteReady=true; } }
-  const spriteScale=1.6, spriteFootAlign=56;
-
-  // Parallax
-  const bgClouds = loadImg('clouds.png');
-  const bgSkyline = loadImg('skyline.png');
-
-  function drawParallax(img,factor,debug){
-    if(!img.complete || img.naturalWidth===0){ return; }
-    const offset=-cameraX*factor;
-    const w=img.width,h=img.height;
-    const scale=canvas.height/h;
-    let startX=(offset%(w*scale));
-    if(startX>0) startX-=w*scale;
-    for(let x=startX;x<canvas.width;x+=w*scale){
-      ctx.drawImage(img,x,0,w*scale,canvas.height);
-      if(debug){
-        ctx.strokeStyle='rgba(200,0,200,0.6)';
-        ctx.lineWidth=3;
-        ctx.strokeRect(x,0,w*scale,canvas.height);
-      }
+  // ===== Parallax-Layer mit konfigurierbarer Höhe =====
+  const bg = {
+    clouds: new Image(),
+    skyline: new Image(),
+    config: {
+      clouds: {factor:0.25, height:260, align:'top'},   // sanft & oben
+      skyline:{factor:0.50, height:180, align:'bottom'} // kleiner, am Boden
     }
+  };
+  bg.clouds.src = 'img/clouds.png';
+  bg.skyline.src= 'img/skyline.png';
+
+  function drawParallax(img, {factor, height, align='bottom'}){
+    if(!img.complete || !img.naturalWidth) return; // still loading
+    const scale = height / img.naturalHeight;
+    const tileW = img.naturalWidth * scale;
+    const offset = -cameraX * factor;
+    let startX = (offset % tileW); if(startX>0) startX -= tileW;
+    const y = align==='top' ? 0 : canvas.height - height;
+    for(let x=startX; x<canvas.width; x+=tileW){ ctx.drawImage(img, x, y, tileW, height); }
   }
 
-  // Events
-  const msgEl=document.getElementById('msg');
-  const dlg=document.getElementById('dialog');
-  const dlgText=document.getElementById('dlgText');
-  const dlgChoices=document.getElementById('dlgChoices');
-  const hudMoney=document.getElementById('money');
-  const hudKarma=document.getElementById('karma');
-
-  const fired=new Set();
-  const triggers=[
-    {id:'beggar',x:620,r:60,text:'Bahnhofsviertel: „4 € nach Gießen… ehrlich!“',choices:[{label:'4 € geben',fn:()=>{money(-4);karma(+1);say('Du spendest 4 €');}},{label:'Ablehnen',fn:()=>{karma(-1);say('Er murmelt was von Digitalgeld');}}]},
-    {id:'colleague',x:1750,r:60,text:'Kollege: „Weinfest, nur ein Glas 10 €!“',choices:[{label:'Mitgehen',fn:()=>{money(-10);say('War nett.');}},{label:'Ablehnen',fn:()=>{say('Er ist enttäuscht');}}]},
-    {id:'cafe',x:2950,r:70,text:'Café: Flat White 15 €',choices:[{label:'Nehmen',fn:()=>{money(-15);say('Koffein-Kick');}},{label:'Nein',fn:()=>{say('Du bleibst wachsam');}}]},
+  // ===== Plattformen (Bodenstücke) =====
+  const plats = [
+    {x:0, y: world.groundY, w: 1200, h: 120},
+    {x:1200, y: world.groundY, w: 420, h: 120},
+    {x:1650, y: world.groundY, w: 560, h: 120},
+    {x:2250, y: world.groundY, w: 520, h: 120},
+    {x:2850, y: world.groundY, w: 1400, h: 120}
   ];
 
+  // ===== Ereignis-Blöcke (sichtbar, 40x40, animiert) =====
+  const triggers = [
+    {id:'beggar',   x:620,  text:'Bahnhofsviertel: „4 € nach Gießen… ehrlich!“', choices:[
+      {label:'4 € geben (Karma+)', fn:()=>{ money(-4); karma(+1); say('Du spendest 4 €'); }},
+      {label:'Ablehnen (Karma-)',  fn:()=>{ karma(-1); say('Er murmelt was von Digitalgeld…'); }}
+    ]},
+    {id:'colleague',x:1750, text:'Kollege: „Weinfest, nur ein Glas 10 €!“', choices:[
+      {label:'Mitgehen (−10 €)', fn:()=>{ money(-10); say('War nett. Du fühlst dich erstaunlich flink.'); }},
+      {label:'Ablehnen',         fn:()=>{ say('Er: „Na gut… nächstes Mal.“'); }}
+    ]},
+    {id:'cafe',    x:2950, text:'Café: „Flat White? 15 €.“', choices:[
+      {label:'Nehmen (−15 €)',   fn:()=>{ if(player.money>=15){ money(-15); say('Koffein‑Kick.'); } else say('Peinlich: Nicht genug Geld.'); }},
+      {label:'Nein',              fn:()=>{ say('Du bleibst wachsam – gratis.'); }}
+    ]}
+  ];
+  const fired = new Set();
+
+  // ===== Dialog =====
+  const dialog = document.getElementById('dialog');
+  const dlgText = document.getElementById('dlgText');
+  const dlgChoices = document.getElementById('dlgChoices');
+  let dialogOpen=false;
   function openDialog(tr){
-    dlg.style.display='block';
-    dlgText.textContent=tr.text;
-    dlgChoices.innerHTML='';
-    tr.choices.forEach(ch=>{
-      const b=document.createElement('button');
-      b.textContent=ch.label;
-      b.onclick=()=>{ch.fn();fired.add(tr.id);closeDialog();};
-      dlgChoices.appendChild(b);
-    });
+    dialogOpen=true; dialog.style.display='block';
+    dlgText.textContent=tr.text; dlgChoices.innerHTML='';
+    tr.choices.forEach(ch=>{ const b=document.createElement('button'); b.textContent=ch.label; b.onclick=()=>{ ch.fn(); fired.add(tr.id); closeDialog();}; dlgChoices.appendChild(b);});
   }
-  function closeDialog(){ dlg.style.display='none'; }
-  function checkTriggers(){
-    for(const tr of triggers){
-      if(fired.has(tr.id)) continue;
-      if(Math.abs(player.x-tr.x)<tr.r){ openDialog(tr); return; }
-    }
-  }
+  function closeDialog(){ dialog.style.display='none'; dialogOpen=false; }
 
-  // Hilfsfunktionen
-  function money(d){player.money+=d;hudMoney.textContent='€'+player.money;}
-  function karma(d){player.karma+=d;hudKarma.textContent='Karma:'+player.karma;}
-  function say(t){msgEl.textContent=t;clearTimeout(say._t);say._t=setTimeout(()=>{if(msgEl.textContent===t)msgEl.textContent='';},4200);}
+  // ===== Utils =====
+  const GRAVITY=1800, MOVE=260, JUMP=-620;
+  function aabb(a,b){ return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
+  function say(t){ msgEl.textContent=t; clearTimeout(say._t); say._t=setTimeout(()=>{ if(msgEl.textContent===t) msgEl.textContent=''; }, 4800); }
+  function money(d){ player.money=Math.max(0, Math.round((player.money+d)*100)/100); hudMoney.textContent=`€ ${player.money}`; }
+  function karma(d){ player.karma+=d; hudKarma.textContent=`Karma: ${player.karma}`; }
+  function zoneHUD(){ const z=world.zones.slice().reverse().find(z=>player.x>=z.x); if(z) zoneEl.textContent=z.name; }
 
-  // Eingaben
+  // ===== Eingaben =====
   const keys=new Set();
-  window.addEventListener('keydown',e=>{keys.add(e.key.toLowerCase());});
-  window.addEventListener('keyup',e=>{keys.delete(e.key.toLowerCase());});
+  addEventListener('keydown',e=>{ keys.add(e.key.toLowerCase()); if(['arrowleft','arrowright','arrowup',' '].includes(e.key.toLowerCase())) e.preventDefault(); });
+  addEventListener('keyup',  e=> keys.delete(e.key.toLowerCase()));
 
-  // Update & Render
-  const GRAVITY=1800,JUMP=-620,MOVE=260;
-  function update(dt){
-    let move=0;
-    if(keys.has('arrowleft')||keys.has('a')) move-=1;
-    if(keys.has('arrowright')||keys.has('d')) move+=1;
-    player.vx=move*MOVE;
-    if((keys.has(' ')||keys.has('w')||keys.has('arrowup'))&&player.onGround){player.vy=JUMP;player.onGround=false;}
-    player.vy+=GRAVITY*dt;
-    player.x+=player.vx*dt;player.y+=player.vy*dt;
-    if(player.y>world.groundY-56){player.y=world.groundY-56;player.vy=0;player.onGround=true;}
-    if(player.vx>0) player.facing=1; else if(player.vx<0) player.facing=-1;
-    const target = Math.max(0, Math.min(world.width-canvas.width, player.x-canvas.width/2));
-    cameraX += (target - cameraX) * 0.1;
-    checkTriggers();
-    if(Math.abs(player.vx)>5) player.animTime+=dt; else player.animTime=0;
-  }
+  // ===== Update =====
+  function update(dt, t){
+    zoneHUD();
+    // Bewegung
+    let move=0; if(keys.has('a')||keys.has('arrowleft')) move-=1; if(keys.has('d')||keys.has('arrowright')) move+=1; player.vx = move*MOVE;
+    const jump = keys.has(' ')||keys.has('w')||keys.has('arrowup'); if(jump && player.onGround){ player.vy=JUMP; player.onGround=false; }
+    player.vy += GRAVITY*dt; player.x += player.vx*dt; player.y += player.vy*dt;
+    // Plattform-Kollision
+    player.onGround=false; for(const p of plats){ const A={x:player.x,y:player.y,w:player.w,h:player.h}; const B=p; if(aabb(A,B)){ const prevY=player.y - player.vy*dt; if(prevY + player.h <= p.y + 4){ player.y=p.y - player.h; player.vy=0; player.onGround=true; } else { if(player.x + player.w/2 < p.x + p.w/2) player.x=p.x - player.w; else player.x=p.x + p.w; player.vx=0; } } }
+    // Grenzen
+    player.x = Math.max(0, Math.min(world.width - player.w, player.x));
+    if(player.vx>5) player.facing=1; else if(player.vx<-5) player.facing=-1;
+    player.animTime = Math.abs(player.vx)>5 ? (player.animTime+dt) : 0;
+    // Kamera smooth
+    const lead = 120 * Math.sign(player.vx); const targetCam = Math.max(0, Math.min(world.width - canvas.width, player.x - canvas.width/2 + lead)); cameraX += (targetCam - cameraX) * 0.12;
 
-  function drawPlayer(x,y){
-    if(spriteReady){
-      const moving=Math.abs(player.vx)>5;
-      const idx=moving?Math.floor((player.animTime/0.12)%2):0;
-      const img=playerFrames[idx];
-      const scale=spriteScale*(spriteFootAlign/(img.naturalHeight||spriteFootAlign));
-      const dw=(img.naturalWidth||30)*scale;
-      const dh=(img.naturalHeight||spriteFootAlign)*scale;
-      const dx=Math.round(x+player.w/2-dw/2);
-      const dy=Math.round((y+player.h)-dh);
-      ctx.save();
-      if(player.facing===-1){ctx.translate(dx+dw/2,0);ctx.scale(-1,1);ctx.translate(-(dx+dw/2),0);} 
-      ctx.drawImage(img,dx,dy,dw,dh);
-      ctx.restore();
-    } else {
-      ctx.fillStyle='#ff5733';
-      ctx.fillRect(x,y,player.w,player.h);
+    // Event-Block Kollision
+    if(!dialogOpen){
+      for(const tr of triggers){ if(fired.has(tr.id)) continue; const bx=tr.x, by=world.groundY-40, bw=40, bh=40; const block={x:bx,y:by,w:bw,h:bh}; const me={x:player.x,y:player.y,w:player.w,h:player.h}; if(aabb(me,block)){ openDialog(tr); break; } }
     }
   }
 
-  function render(){
+  // ===== Render =====
+  function drawPlatforms(){ for(const p of plats){ ctx.fillStyle='#e6e2d3'; ctx.fillRect(p.x - cameraX, p.y, p.w, p.h); ctx.fillStyle='#c9c3b1'; ctx.fillRect(p.x - cameraX, p.y-4, p.w, 4); } }
+  function drawPlayer(){
+    const x = player.x - cameraX, y = player.y;
+    if(sprite.ready){
+      const moving = Math.abs(player.vx)>5; const idx = moving? Math.floor((player.animTime/0.12)%2):0; const img=sprite.frames[idx];
+      const scale = sprite.scale * (sprite.foot / (img.naturalHeight||sprite.foot));
+      const dw = (img.naturalWidth||30) * scale; const dh = (img.naturalHeight||sprite.foot) * scale;
+      const dx = Math.round(x + player.w/2 - dw/2); const dy = Math.round((y + player.h) - dh);
+      ctx.save(); if(player.facing===-1){ ctx.translate(dx+dw/2,0); ctx.scale(-1,1); ctx.translate(-(dx+dw/2),0);} ctx.imageSmoothingEnabled=true; ctx.drawImage(img, dx, dy, dw, dh); ctx.restore();
+    } else { ctx.fillStyle='#ff784e'; ctx.fillRect(x,y,player.w,player.h); }
+  }
+  function drawEventBlocks(t){
+    for(const tr of triggers){ if(fired.has(tr.id)) continue; const bx=tr.x - cameraX, by=world.groundY-40; const bob = Math.sin(t/420 + tr.x)*4; ctx.fillStyle= '#ffd24d'; ctx.strokeStyle='#a07a1b'; ctx.lineWidth=3; ctx.fillRect(bx, by+bob, 40, 40); ctx.strokeRect(bx, by+bob, 40, 40); ctx.fillStyle='#1b1b1b'; ctx.font='bold 24px system-ui, sans-serif'; ctx.fillText('?', bx+12, by+28+bob); }
+  }
+  function render(ts){
     ctx.clearRect(0,0,canvas.width,canvas.height);
-    // Erst Skyline zeichnen, dann Clouds oben drauf (sichtbarer)
-    drawParallax(bgSkyline,0.5);
-    drawParallax(bgClouds,0.2,true); // mit Debug-Rahmen
-    ctx.fillStyle='#dcd6c9';ctx.fillRect(0,world.groundY,canvas.width,80);
-    drawPlayer(player.x-cameraX,player.y);
+    // Parallax in richtiger Reihenfolge: erst ferne Clouds, dann Skyline
+    drawParallax(bg.clouds, bg.config.clouds);
+    drawParallax(bg.skyline, bg.config.skyline);
+    // Boden / Plattformen
+    drawPlatforms();
+    // Event-Blöcke und Spieler
+    drawEventBlocks(ts||0);
+    drawPlayer();
   }
 
-  let last=0;
-  function loop(ts){const dt=(ts-last)/1000||0;last=ts;update(dt);render();requestAnimationFrame(loop);} requestAnimationFrame(loop);
+  // ===== Loop =====
+  let last=0; function loop(ts){ const dt=Math.min(0.033,(ts-last)/1000||0.016); last=ts; update(dt, ts); render(ts); requestAnimationFrame(loop); } requestAnimationFrame(loop);
 })();
 </script>
 </body>
