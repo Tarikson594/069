@@ -3,33 +3,77 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <title>Frankfurt Jump & Run – Iteration 5.4 (Plattformen + Ziel Debug)</title>
+  <title>Frankfurt Jump & Run – Iteration 5.5 (Ereignis-Blöcke)</title>
   <style>
-    body,html{margin:0;padding:0;height:100%;background:#0b0d14;color:#fff}
+    body,html{margin:0;padding:0;height:100%;background:#0b0d14;color:#fff;font-family:sans-serif}
     canvas{display:block;width:100%;height:100%;background:#bfe6ff}
+    #hud{position:absolute;left:12px;top:12px;z-index:5;display:flex;gap:10px;align-items:center;background:rgba(10,15,30,.6);border:1px solid #263355;border-radius:10px;padding:6px 10px}
+    #hud .badge{background:rgba(20,30,55,.7);border:1px solid #30426f;padding:4px 8px;border-radius:8px;font-weight:700}
+    #dialog{position:absolute;left:50%;top:18%;transform:translateX(-50%);z-index:10;background:#0f152a;border:1px solid #2b3f72;border-radius:12px;display:none;max-width:min(760px,92vw)}
+    #dialog header{padding:10px 14px;border-bottom:1px solid #22335c;font-weight:800}
+    #dialog .content{padding:12px 14px;line-height:1.45}
+    #dialog .choices{padding:0 14px 14px;display:flex;flex-direction:column;gap:8px}
+    #dialog button{background:#182246;color:#e9ecff;border:1px solid #2d3b70;padding:10px 12px;border-radius:10px;cursor:pointer;text-align:left}
+    #dialog button:hover{background:#1f2b57}
   </style>
 </head>
 <body>
   <canvas id="game" width="960" height="540"></canvas>
+  <div id="hud">
+    <span class="badge" id="money">€100</span>
+    <span class="badge" id="karma">Karma:0</span>
+  </div>
+  <div id="dialog">
+    <header>Entscheidung</header>
+    <div class="content" id="dlgText"></div>
+    <div class="choices" id="dlgChoices"></div>
+  </div>
 <script>
 (() => {
   const canvas=document.getElementById('game');
   const ctx=canvas.getContext('2d');
+  const hudMoney=document.getElementById('money');
+  const hudKarma=document.getElementById('karma');
+  const dialog=document.getElementById('dialog');
+  const dlgText=document.getElementById('dlgText');
+  const dlgChoices=document.getElementById('dlgChoices');
 
   const world={width:4400,height:canvas.height,groundY:460};
-  const plats=[
-    {x:0,y:world.groundY,w:1200,h:120},
-    {x:1200,y:world.groundY,w:420,h:120},
-    {x:1650,y:world.groundY,w:560,h:120},
-    {x:2250,y:world.groundY,w:520,h:120},
-    {x:2850,y:world.groundY,w:1400,h:120}
-  ];
+  const plats=[{x:0,y:world.groundY,w:1200,h:120},{x:1200,y:world.groundY,w:420,h:120},{x:1650,y:world.groundY,w:560,h:120},{x:2250,y:world.groundY,w:520,h:120},{x:2850,y:world.groundY,w:1400,h:120}];
 
-  const player={x:60,y:world.groundY-56,w:30,h:40,vx:0,vy:0,onGround:false};
+  const player={x:60,y:world.groundY-56,w:30,h:40,vx:0,vy:0,onGround:false,money:100,karma:0};
   let cameraX=0;
 
-  const goal={x:4200,y:world.groundY-60,w:60,h:60};
-  let gameEnded=false;
+  const goal={x:4200,y:world.groundY-60,w:60,h:60};let gameEnded=false;
+
+  const triggers=[
+    {id:'beggar',x:620,text:'Bahnhofsviertel: „4 € nach Gießen… ehrlich!“',choices:[
+      {label:'4 € geben (Karma+)',fn:()=>{money(-4);karma(+1);} },
+      {label:'Ablehnen (Karma-)',fn:()=>{karma(-1);} }
+    ]},
+    {id:'colleague',x:1750,text:'Kollege: „Weinfest, nur ein Glas 10 €!“',choices:[
+      {label:'Mitgehen (−10 €)',fn:()=>{money(-10);} },
+      {label:'Ablehnen',fn:()=>{} }
+    ]},
+    {id:'cafe',x:2950,text:'Café: „Flat White? 15 €.“',choices:[
+      {label:'Nehmen (−15 €)',fn:()=>{money(-15);} },
+      {label:'Nein',fn:()=>{} }
+    ]}
+  ];
+  const fired=new Set();
+  let dialogOpen=false;
+
+  function openDialog(tr){
+    dialogOpen=true;dialog.style.display='block';
+    dlgText.textContent=tr.text;dlgChoices.innerHTML='';
+    tr.choices.forEach(ch=>{
+      const b=document.createElement('button');
+      b.textContent=ch.label;
+      b.onclick=()=>{ch.fn();fired.add(tr.id);closeDialog();};
+      dlgChoices.appendChild(b);
+    });
+  }
+  function closeDialog(){dialog.style.display='none';dialogOpen=false;}
 
   const GRAVITY=1800,MOVE=260,JUMP=-620;
   const keys=new Set();
@@ -37,85 +81,36 @@
   addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
 
   function aabb(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y;}
+  function money(d){player.money=Math.max(0,player.money+d);hudMoney.textContent='€'+player.money;}
+  function karma(d){player.karma+=d;hudKarma.textContent='Karma:'+player.karma;}
 
-  function update(dt){
+  function update(dt,t){
     if(gameEnded)return;
     let move=0;if(keys.has('a')||keys.has('arrowleft'))move-=1;if(keys.has('d')||keys.has('arrowright'))move+=1;
     player.vx=move*MOVE;
-    const jump=keys.has(' ')||keys.has('w')||keys.has('arrowup');
-    if(jump&&player.onGround){player.vy=JUMP;player.onGround=false;}
-
-    player.vy+=GRAVITY*dt;
-    player.x+=player.vx*dt;player.y+=player.vy*dt;
+    const jump=keys.has(' ')||keys.has('w')||keys.has('arrowup');if(jump&&player.onGround){player.vy=JUMP;player.onGround=false;}
+    player.vy+=GRAVITY*dt;player.x+=player.vx*dt;player.y+=player.vy*dt;
 
     player.onGround=false;
-    for(const p of plats){
-      if(aabb(player,p)){
-        const prevY=player.y-player.vy*dt;
-        if(prevY+player.h<=p.y+4){
-          player.y=p.y-player.h;player.vy=0;player.onGround=true;
-        }else{
-          if(player.x+player.w/2<p.x+p.w/2)player.x=p.x-player.w;
-          else player.x=p.x+p.w;
-          player.vx=0;
-        }
-      }
-    }
+    for(const p of plats){if(aabb(player,p)){const prevY=player.y-player.vy*dt;if(prevY+player.h<=p.y+4){player.y=p.y-player.h;player.vy=0;player.onGround=true;}else{if(player.x+player.w/2<p.x+p.w/2)player.x=p.x-player.w;else player.x=p.x+p.w;player.vx=0;}}}
+
     player.x=Math.max(0,Math.min(world.width-player.w,player.x));
+    const lead=120*Math.sign(player.vx);const targetCam=Math.max(0,Math.min(world.width-canvas.width,player.x-canvas.width/2+lead));cameraX+=(targetCam-cameraX)*0.12;
 
-    const lead=120*Math.sign(player.vx);
-    const targetCam=Math.max(0,Math.min(world.width-canvas.width,player.x-canvas.width/2+lead));
-    cameraX+=(targetCam-cameraX)*0.12;
-
-    if(aabb(player,goal)&&!gameEnded){
-      gameEnded=true;
-      alert('Ziel erreicht! 🎉');
-    }
+    if(!dialogOpen){for(const tr of triggers){if(fired.has(tr.id))continue;const bx=tr.x,by=world.groundY-40,bw=40,bh=40;if(aabb(player,{x:bx,y:by,w:bw,h:bh})){openDialog(tr);break;}}}
+    if(aabb(player,goal)&&!gameEnded){gameEnded=true;alert('Ziel erreicht! 🎉');}
   }
 
-  function drawPlatforms(){
-    for(const p of plats){
-      ctx.fillStyle='#e6e2d3';
-      ctx.fillRect(p.x-cameraX,p.y,p.w,p.h);
-      ctx.fillStyle='#c9c3b1';
-      ctx.fillRect(p.x-cameraX,p.y-4,p.w,4);
-    }
+  function drawPlatforms(){for(const p of plats){ctx.fillStyle='#e6e2d3';ctx.fillRect(p.x-cameraX,p.y,p.w,p.h);ctx.fillStyle='#c9c3b1';ctx.fillRect(p.x-cameraX,p.y-4,p.w,4);}}
+  function drawPlayer(){ctx.fillStyle='red';ctx.fillRect(player.x-cameraX,player.y,player.w,player.h);}
+  function drawGoal(){const gx=goal.x-cameraX,gy=goal.y;ctx.fillStyle='#4dff88';ctx.fillRect(gx,gy,goal.w,goal.h);ctx.fillStyle='black';ctx.fillText('Ziel',gx+10,gy+35);}
+  function drawEventBlocks(t){
+    for(const tr of triggers){if(fired.has(tr.id))continue;const bx=tr.x-cameraX,by=world.groundY-40;const bob=Math.sin(t/420+tr.x)*4;ctx.fillStyle='#ffd24d';ctx.strokeStyle='#a07a1b';ctx.lineWidth=3;ctx.fillRect(bx,by+bob,40,40);ctx.strokeRect(bx,by+bob,40,40);ctx.fillStyle='#1b1b1b';ctx.font='bold 24px sans-serif';ctx.fillText('?',bx+12,by+28+bob);}}
   }
 
-  function drawPlayer(){
-    const x=player.x-cameraX,y=player.y;
-    ctx.fillStyle='red';
-    ctx.fillRect(x,y,player.w,player.h);
-  }
+  function render(ts){ctx.clearRect(0,0,canvas.width,canvas.height);ctx.fillStyle='#bfe6ff';ctx.fillRect(0,0,canvas.width,canvas.height);drawPlatforms();drawGoal();drawEventBlocks(ts||0);drawPlayer();}
 
-  function drawGoal(){
-    const gx=goal.x-cameraX,gy=goal.y;
-    ctx.fillStyle='#4dff88';
-    ctx.strokeStyle='#116633';
-    ctx.lineWidth=3;
-    ctx.fillRect(gx,gy,goal.w,goal.h);
-    ctx.strokeRect(gx,gy,goal.w,goal.h);
-    ctx.fillStyle='#003300';
-    ctx.font='20px sans-serif';
-    ctx.fillText('Ziel',gx+10,gy+35);
-  }
-
-  function render(){
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    ctx.fillStyle='#bfe6ff';ctx.fillRect(0,0,canvas.width,canvas.height);
-    drawPlatforms();
-    drawGoal();
-    drawPlayer();
-  }
-
-  let last=0;
-  function loop(ts){
-    const dt=Math.min(0.033,(ts-last)/1000||0.016);last=ts;
-    update(dt);
-    render();
-    requestAnimationFrame(loop);
-  }
-  requestAnimationFrame(loop);
+  let last=0;function loop(ts){const dt=Math.min(0.033,(ts-last)/1000||0.016);last=ts;update(dt,ts);render(ts);requestAnimationFrame(loop);}requestAnimationFrame(loop);
 })();
 </script>
 </body>
