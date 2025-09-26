@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <title>Frankfurt Jump & Run – Iteration 5.9 (Highscore + Zeit)</title>
+  <title>Frankfurt Jump & Run – Iteration 5.10 (Kombinierter Score)</title>
   <style>
     body,html{margin:0;padding:0;height:100%;background:#0b0d14;color:#fff;font-family:sans-serif}
     canvas{display:block;width:100%;height:100%;background:#bfe6ff}
@@ -121,13 +121,16 @@
     if(aabb(player,goal)&&!gameEnded){
       gameEnded=true;
       const timeTaken=Math.round((Date.now()-startTime)/1000);
-      endSummary.textContent=`Geld: €${player.money} · Karma: ${player.karma} · Zeit: ${timeTaken}s`;
+      const score=player.money+(player.karma*10)-timeTaken;
+      endSummary.textContent=`Geld: €${player.money} · Karma: ${player.karma} · Zeit: ${timeTaken}s · Score: ${score}`;
       // Highscore speichern
       let scores=JSON.parse(localStorage.getItem('scores')||'[]');
-      scores.push({money:player.money,karma:player.karma,time:timeTaken});
+      scores.push({money:player.money,karma:player.karma,time:timeTaken,score:score});
       if(scores.length>5) scores=scores.slice(-5);
+      // Sortieren nach Score
+      scores.sort((a,b)=>b.score-a.score);
       localStorage.setItem('scores',JSON.stringify(scores));
-      highscores.innerHTML=scores.map(s=>`<li>€${s.money} · Karma ${s.karma} · ${s.time}s</li>`).join('');
+      highscores.innerHTML=scores.map(s=>`<li>€${s.money} · Karma ${s.karma} · ${s.time}s · Score ${s.score}</li>`).join('');
       endOL.style.display='flex';
     }
   }
