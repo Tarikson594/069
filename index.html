@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <title>Frankfurt Jump & Run – Iteration 6.1 (Level-Hintergründe)</title>
+  <title>Frankfurt Jump & Run – Iteration 6.3 (Hindernisse, Animation, Minispiele, Menü)</title>
   <style>
     body,html{margin:0;padding:0;height:100%;background:#0b0d14;color:#fff;font-family:sans-serif}
     canvas{display:block;width:100%;height:100%;}
@@ -36,6 +36,14 @@
     <div class="content" id="dlgText"></div>
     <div class="choices" id="dlgChoices"></div>
   </div>
+  <div id="menuOL" class="overlay" style="display:flex">
+    <div class="panel">
+      <h1>Frankfurt Jump & Run</h1>
+      <button class="btn" id="btnNew">Neues Spiel</button>
+      <p>Level auswählen:</p>
+      <div id="levelSelect"></div>
+    </div>
+  </div>
   <div id="endOL" class="overlay">
     <div class="panel">
       <h1 id="endTitle">Level geschafft 🎉</h1>
@@ -55,6 +63,7 @@
   const dialog=document.getElementById('dialog');
   const dlgText=document.getElementById('dlgText');
   const dlgChoices=document.getElementById('dlgChoices');
+  const menuOL=document.getElementById('menuOL');
   const endOL=document.getElementById('endOL');
   const endTitle=document.getElementById('endTitle');
   const endSummary=document.getElementById('endSummary');
@@ -64,7 +73,10 @@
 
   btnRestart.onclick=()=>location.reload();
 
-  const player={x:60,y:0,w:30,h:40,vx:0,vy:0,onGround:false,money:100,karma:0};
+  const sprite1=new Image();sprite1.src='img/sprite1.png';
+  const sprite2=new Image();sprite2.src='img/sprite2.png';
+
+  const player={x:60,y:0,w:30,h:40,vx:0,vy:0,onGround:false,money:100,karma:0,frame:0,frameTime:0};
   let cameraX=0;
   let gameEnded=false;
   let startTime=Date.now();
@@ -72,98 +84,88 @@
 
   const levels=[
     {name:'Bahnhofsviertel',bg:'#1b0c2f',plats:[{x:0,y:460,w:1200,h:120},{x:1300,y:460,w:900,h:120}],
-     triggers:[
-       {id:'beggar',x:300,text:'„4 € nach Gießen… ehrlich!“',choices:[{label:'4 € geben',fn:()=>{money(-4);karma(+1);}},{label:'Ablehnen',fn:()=>karma(-1)}]},
-       {id:'dealer',x:700,text:'Dealer: „Willst du was kaufen? (20 €)“',choices:[{label:'Kaufen',fn:()=>{money(-20);karma(-2);}},{label:'Nein danke',fn:()=>{}}]},
-       {id:'taxi',x:1100,text:'Taxifahrer: „Kurzfahrt für 20 €?“',choices:[{label:'Einsteigen',fn:()=>money(-20)},{label:'Weiterlaufen',fn:()=>{}}]},
-       {id:'club',x:1500,text:'Club-Promoter: „Techno-Event, Eintritt 15 €“',choices:[{label:'Rein da',fn:()=>money(-15)},{label:'Ablehnen',fn:()=>{}}]}
-     ]},
+     triggers:[{id:'beggar',x:300,text:'„4 € nach Gießen… ehrlich!“',choices:[{label:'4 € geben',fn:()=>{money(-4);karma(+1);}},{label:'Ablehnen',fn:()=>karma(-1)}]}],
+     obstacles:[{x:500,y:420,w:40,h:40}]},
     {name:'Zeil',bg:'#cce7ff',plats:[{x:0,y:460,w:1200,h:120},{x:1300,y:460,w:900,h:120}],
-     triggers:[
-       {id:'shopping',x:350,text:'Kollege: „Shopping, nur ein Shirt für 50 €?“',choices:[{label:'Kaufen',fn:()=>money(-50)},{label:'Nein',fn:()=>{}}]},
-       {id:'flyer',x:700,text:'Flyer-Verteiler: „Bitte unterschreiben!“',choices:[{label:'Unterschreiben',fn:()=>karma(+1)},{label:'Ignorieren',fn:()=>karma(-1)}]},
-       {id:'musician',x:1100,text:'Straßenmusiker: „Spende 2 €?“',choices:[{label:'Spenden',fn:()=>money(-2)},{label:'Vorbeigehen',fn:()=>{}}]},
-       {id:'handy',x:1500,text:'Handyshop: „Neues Handy für 400 €?“',choices:[{label:'Kaufen (Game Over)',fn:()=>{money(-400);endGame(true);}},{label:'Nein',fn:()=>{}}]}
-     ]},
-    {name:'Bornheim',bg:'#d9f0c7',plats:[{x:0,y:460,w:1200,h:120},{x:1300,y:460,w:900,h:120}],
-     triggers:[
-       {id:'aepler',x:350,text:'Nachbar: „Komm auf einen Äppler (5 €)“',choices:[{label:'Ja',fn:()=>money(-5)},{label:'Nein',fn:()=>{}}]},
-       {id:'flohmarkt',x:700,text:'Flohmarkt: „Schallplatte für 10 €?“',choices:[{label:'Kaufen',fn:()=>money(-10)},{label:'Weitergehen',fn:()=>{}}]},
-       {id:'hund',x:1100,text:'Hundebesitzer: „Kannst du auf Bello aufpassen?“',choices:[{label:'Ja',fn:()=>karma(+1)},{label:'Nein',fn:()=>karma(-1)}]},
-       {id:'kneipe',x:1500,text:'Kneipenwirt: „Happy Hour! (8 €)“',choices:[{label:'Mitmachen',fn:()=>money(-8)},{label:'Weiter',fn:()=>{}}]}
-     ]},
-    {name:'Mainufer',bg:'#99d9f2',plats:[{x:0,y:460,w:1200,h:120},{x:1300,y:460,w:900,h:120}],
-     triggers:[
-       {id:'jogger',x:350,text:'Jogger: „Spende für den Laufverein?“',choices:[{label:'Spenden 5 €',fn:()=>{money(-5);karma(+1)}},{label:'Nein',fn:()=>{}}]},
-       {id:'biergarten',x:700,text:'Biergarten: „Radler 8 €?“',choices:[{label:'Ja',fn:()=>money(-8)},{label:'Nein',fn:()=>{}}]},
-       {id:'strassenfest',x:1100,text:'Straßenfest: „Eintritt 10 €“',choices:[{label:'Mitmachen',fn:()=>{money(-10);karma(+1)}},{label:'Nein',fn:()=>{}}]},
-       {id:'tourist',x:1500,text:'Touristen: „Kannst du ein Foto machen?“',choices:[{label:'Ja',fn:()=>karma(+1)},{label:'Ignorieren',fn:()=>karma(-1)}]}
-     ]}
+     triggers:[{id:'musician',x:700,text:'Straßenmusiker: Quicktime Event! SPACE drücken',minigame:'musician'}],
+     obstacles:[{x:600,y:420,w:60,h:40}]}
   ];
-
-  function loadLevel(i){
-    currentLevel=i;gameEnded=false;cameraX=0;
-    player.x=60;player.y=world.groundY-56;player.vx=0;player.vy=0;
-    fired.clear();
-    hudLevel.textContent='Level: '+(i+1)+'/'+levels.length+' – '+levels[i].name;
-  }
 
   const world={width:2200,height:canvas.height,groundY:460};
   const fired=new Set();
   let dialogOpen=false;
+  let minigame=null;let minigameProgress=0;let minigameEnd=0;
 
-  function openDialog(tr){dialogOpen=true;dialog.style.display='block';dlgText.textContent=tr.text;dlgChoices.innerHTML='';tr.choices.forEach(ch=>{const b=document.createElement('button');b.textContent=ch.label;b.onclick=()=>{ch.fn();fired.add(tr.id);closeDialog();};dlgChoices.appendChild(b);});}
+  function openDialog(tr){
+    if(tr.minigame){startMinigame(tr.minigame);fired.add(tr.id);return;}
+    dialogOpen=true;dialog.style.display='block';dlgText.textContent=tr.text;dlgChoices.innerHTML='';
+    tr.choices.forEach(ch=>{const b=document.createElement('button');b.textContent=ch.label;b.onclick=()=>{ch.fn();fired.add(tr.id);closeDialog();};dlgChoices.appendChild(b);});
+  }
   function closeDialog(){dialog.style.display='none';dialogOpen=false;}
 
+  function startMinigame(type){
+    if(type==='musician'){
+      minigame='musician';minigameProgress=0;minigameEnd=Date.now()+3000;
+    }
+  }
+
   const GRAVITY=1800,MOVE=260,JUMP=-620;const keys=new Set();
-  addEventListener('keydown',e=>{keys.add(e.key.toLowerCase());});
+  addEventListener('keydown',e=>{
+    keys.add(e.key.toLowerCase());
+    if(minigame==='musician'&&e.key.toLowerCase()===' '){minigameProgress++;}
+  });
   addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
 
   function aabb(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y;}
   function money(d){player.money=Math.max(0,player.money+d);hudMoney.textContent='€'+player.money;}
   function karma(d){player.karma+=d;hudKarma.textContent='Karma:'+player.karma;}
 
-  function endGame(force){
-    if(force){endTitle.textContent='Game Over';btnNext.style.display='none';endOL.style.display='flex';}
-  }
-
   function update(dt,t){
     if(gameEnded)return;
+    if(minigame){
+      if(Date.now()>minigameEnd){
+        if(minigameProgress>=3){karma(+2);}else{money(-5);}
+        minigame=null;
+      }
+      return;
+    }
     let move=0;if(keys.has('a')||keys.has('arrowleft'))move-=1;if(keys.has('d')||keys.has('arrowright'))move+=1;player.vx=move*MOVE;
     const jump=keys.has(' ')||keys.has('w')||keys.has('arrowup');if(jump&&player.onGround){player.vy=JUMP;player.onGround=false;}
     player.vy+=GRAVITY*dt;player.x+=player.vx*dt;player.y+=player.vy*dt;
 
     player.onGround=false;for(const p of levels[currentLevel].plats){if(aabb(player,p)){const prevY=player.y-player.vy*dt;if(prevY+player.h<=p.y+4){player.y=p.y-player.h;player.vy=0;player.onGround=true;}else{if(player.x+player.w/2<p.x+p.w/2)player.x=p.x-player.w;else player.x=p.x+p.w;player.vx=0;}}}
+    for(const ob of levels[currentLevel].obstacles){if(aabb(player,ob)){money(-5);player.x-=20;}}
 
     player.x=Math.max(0,Math.min(world.width-player.w,player.x));
     const lead=120*Math.sign(player.vx);const targetCam=Math.max(0,Math.min(world.width-canvas.width,player.x-canvas.width/2+lead));cameraX+=(targetCam-cameraX)*0.12;
 
     if(!dialogOpen){for(const tr of levels[currentLevel].triggers){if(fired.has(tr.id))continue;const bx=tr.x,by=world.groundY-40;if(aabb(player,{x:bx,y:by,w:40,h:40})){openDialog(tr);break;}}}
-    if(player.x>world.width-80&&!gameEnded){
-      gameEnded=true;
-      const timeTaken=Math.round((Date.now()-startTime)/1000);
-      const score=player.money+(player.karma*10)-timeTaken;
-      endSummary.textContent=`Geld: €${player.money} · Karma ${player.karma} · Zeit ${timeTaken}s · Score ${score}`;
-      let scores=JSON.parse(localStorage.getItem('scores')||'[]');
-      scores.push({money:player.money,karma:player.karma,time:timeTaken,score:score,level:levels[currentLevel].name});
-      if(scores.length>10) scores=scores.slice(-10);
-      scores.sort((a,b)=>b.score-a.score);
-      localStorage.setItem('scores',JSON.stringify(scores));
-      highscores.innerHTML=scores.map(s=>`<li>${s.level}: €${s.money} · Karma ${s.karma} · ${s.time}s · Score ${s.score}</li>`).join('');
-      if(currentLevel<levels.length-1){endTitle.textContent='Level geschafft 🎉';btnNext.style.display='inline-block';btnNext.onclick=()=>{endOL.style.display='none';loadLevel(currentLevel+1);};}else{endTitle.textContent='Alle Levels geschafft 🎉';btnNext.style.display='none';}
-      endOL.style.display='flex';
-    }
+    if(player.x>world.width-80&&!gameEnded){endLevel();}
+
+    if(move!==0){player.frameTime+=dt;if(player.frameTime>0.2){player.frame=(player.frame+1)%2;player.frameTime=0;}}else{player.frame=0;}
+  }
+
+  function endLevel(){
+    gameEnded=true;const timeTaken=Math.round((Date.now()-startTime)/1000);
+    const score=player.money+(player.karma*10)-timeTaken;
+    endSummary.textContent=`Geld: €${player.money} · Karma ${player.karma} · Zeit ${timeTaken}s · Score ${score}`;
+    endOL.style.display='flex';
   }
 
   function drawPlatforms(){for(const p of levels[currentLevel].plats){ctx.fillStyle='#e6e2d3';ctx.fillRect(p.x-cameraX,p.y,p.w,p.h);ctx.fillStyle='#c9c3b1';ctx.fillRect(p.x-cameraX,p.y-4,p.w,4);}}
-  function drawPlayer(){ctx.fillStyle='red';ctx.fillRect(player.x-cameraX,player.y,player.w,player.h);}
+  function drawObstacles(){for(const ob of levels[currentLevel].obstacles){ctx.fillStyle='brown';ctx.fillRect(ob.x-cameraX,ob.y,ob.w,ob.h);}}
+  function drawPlayer(){const img=(player.frame===0?sprite1:sprite2);ctx.drawImage(img,player.x-cameraX,player.y,player.w,player.h);}
   function drawEventBlocks(t){for(const tr of levels[currentLevel].triggers){if(fired.has(tr.id))continue;const bx=tr.x-cameraX,by=world.groundY-40;const bob=Math.sin(t/420+tr.x)*4;ctx.fillStyle='#ffd24d';ctx.strokeStyle='#a07a1b';ctx.lineWidth=3;ctx.fillRect(bx,by+bob,40,40);ctx.strokeRect(bx,by+bob,40,40);ctx.fillStyle='#1b1b1b';ctx.font='bold 24px sans-serif';ctx.fillText('?',bx+12,by+28+bob);}}
 
-  function render(ts){ctx.clearRect(0,0,canvas.width,canvas.height);ctx.fillStyle=levels[currentLevel].bg;ctx.fillRect(0,0,canvas.width,canvas.height);drawPlatforms();drawEventBlocks(ts||0);drawPlayer();}
+  function render(ts){ctx.clearRect(0,0,canvas.width,canvas.height);ctx.fillStyle=levels[currentLevel].bg;ctx.fillRect(0,0,canvas.width,canvas.height);drawPlatforms();drawObstacles();drawEventBlocks(ts||0);drawPlayer();if(minigame==='musician'){ctx.fillStyle='white';ctx.fillText('Drücke SPACE schnell! '+minigameProgress+'/3',canvas.width/2-80,50);}}
 
   let last=0;function loop(ts){const dt=Math.min(0.033,(ts-last)/1000||0.016);last=ts;update(dt,ts);render(ts);requestAnimationFrame(loop);}requestAnimationFrame(loop);
 
-  loadLevel(0);
+  function loadLevel(i){currentLevel=i;gameEnded=false;cameraX=0;player.x=60;player.y=world.groundY-56;player.vx=0;player.vy=0;fired.clear();hudLevel.textContent='Level: '+(i+1)+' – '+levels[i].name;endOL.style.display='none';}
+
+  document.getElementById('btnNew').onclick=()=>{menuOL.style.display='none';loadLevel(0);};
+  const levelSelect=document.getElementById('levelSelect');levels.forEach((lvl,i)=>{const b=document.createElement('button');b.textContent=lvl.name;b.className='btn';b.onclick=()=>{menuOL.style.display='none';loadLevel(i);};levelSelect.appendChild(b);});
+
 })();
 </script>
 </body>
