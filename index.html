@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <title>Frankfurt Jump & Run – Iteration 5.3 (Debug Render)</title>
+  <title>Frankfurt Jump & Run – Iteration 5.4 (Plattformen + Ziel Debug)</title>
   <style>
     body,html{margin:0;padding:0;height:100%;background:#0b0d14;color:#fff}
     canvas{display:block;width:100%;height:100%;background:#bfe6ff}
@@ -17,40 +17,102 @@
   const ctx=canvas.getContext('2d');
 
   const world={width:4400,height:canvas.height,groundY:460};
-  const player={x:60,y:world.groundY-56,w:30,h:40,vx:0,vy:0};
+  const plats=[
+    {x:0,y:world.groundY,w:1200,h:120},
+    {x:1200,y:world.groundY,w:420,h:120},
+    {x:1650,y:world.groundY,w:560,h:120},
+    {x:2250,y:world.groundY,w:520,h:120},
+    {x:2850,y:world.groundY,w:1400,h:120}
+  ];
+
+  const player={x:60,y:world.groundY-56,w:30,h:40,vx:0,vy:0,onGround:false};
   let cameraX=0;
 
+  const goal={x:4200,y:world.groundY-60,w:60,h:60};
+  let gameEnded=false;
+
+  const GRAVITY=1800,MOVE=260,JUMP=-620;
+  const keys=new Set();
+  addEventListener('keydown',e=>{keys.add(e.key.toLowerCase());});
+  addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
+
+  function aabb(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y;}
+
   function update(dt){
-    // einfache Schwerkraft zum Test
-    player.vy+=1800*dt;
-    player.y+=player.vy*dt;
-    if(player.y>world.groundY-56){player.y=world.groundY-56;player.vy=0;}
+    if(gameEnded)return;
+    let move=0;if(keys.has('a')||keys.has('arrowleft'))move-=1;if(keys.has('d')||keys.has('arrowright'))move+=1;
+    player.vx=move*MOVE;
+    const jump=keys.has(' ')||keys.has('w')||keys.has('arrowup');
+    if(jump&&player.onGround){player.vy=JUMP;player.onGround=false;}
+
+    player.vy+=GRAVITY*dt;
+    player.x+=player.vx*dt;player.y+=player.vy*dt;
+
+    player.onGround=false;
+    for(const p of plats){
+      if(aabb(player,p)){
+        const prevY=player.y-player.vy*dt;
+        if(prevY+player.h<=p.y+4){
+          player.y=p.y-player.h;player.vy=0;player.onGround=true;
+        }else{
+          if(player.x+player.w/2<p.x+p.w/2)player.x=p.x-player.w;
+          else player.x=p.x+p.w;
+          player.vx=0;
+        }
+      }
+    }
+    player.x=Math.max(0,Math.min(world.width-player.w,player.x));
+
+    const lead=120*Math.sign(player.vx);
+    const targetCam=Math.max(0,Math.min(world.width-canvas.width,player.x-canvas.width/2+lead));
+    cameraX+=(targetCam-cameraX)*0.12;
+
+    if(aabb(player,goal)&&!gameEnded){
+      gameEnded=true;
+      alert('Ziel erreicht! 🎉');
+    }
   }
 
-  function render(ts){
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    ctx.fillStyle='#bfe6ff';
-    ctx.fillRect(0,0,canvas.width,canvas.height);
+  function drawPlatforms(){
+    for(const p of plats){
+      ctx.fillStyle='#e6e2d3';
+      ctx.fillRect(p.x-cameraX,p.y,p.w,p.h);
+      ctx.fillStyle='#c9c3b1';
+      ctx.fillRect(p.x-cameraX,p.y-4,p.w,4);
+    }
+  }
 
-    // Bodenlinie debug
-    ctx.strokeStyle='black';
-    ctx.beginPath();
-    ctx.moveTo(0,world.groundY);
-    ctx.lineTo(canvas.width,world.groundY);
-    ctx.stroke();
-
-    // Spieler debug
+  function drawPlayer(){
+    const x=player.x-cameraX,y=player.y;
     ctx.fillStyle='red';
-    ctx.fillRect(player.x-cameraX,player.y,player.w,player.h);
+    ctx.fillRect(x,y,player.w,player.h);
+  }
 
-    console.log('Render',player.x,player.y,'Cam',cameraX);
+  function drawGoal(){
+    const gx=goal.x-cameraX,gy=goal.y;
+    ctx.fillStyle='#4dff88';
+    ctx.strokeStyle='#116633';
+    ctx.lineWidth=3;
+    ctx.fillRect(gx,gy,goal.w,goal.h);
+    ctx.strokeRect(gx,gy,goal.w,goal.h);
+    ctx.fillStyle='#003300';
+    ctx.font='20px sans-serif';
+    ctx.fillText('Ziel',gx+10,gy+35);
+  }
+
+  function render(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle='#bfe6ff';ctx.fillRect(0,0,canvas.width,canvas.height);
+    drawPlatforms();
+    drawGoal();
+    drawPlayer();
   }
 
   let last=0;
   function loop(ts){
-    const dt=(ts-last)/1000||0.016;last=ts;
+    const dt=Math.min(0.033,(ts-last)/1000||0.016);last=ts;
     update(dt);
-    render(ts);
+    render();
     requestAnimationFrame(loop);
   }
   requestAnimationFrame(loop);
