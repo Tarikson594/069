@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <title>Frankfurt Jump & Run – Iteration 5.6 (Bugfix Ereignis-Blöcke)</title>
+  <title>Frankfurt Jump & Run – Iteration 5.7 (Ziel Overlay)</title>
   <style>
     body,html{margin:0;padding:0;height:100%;background:#0b0d14;color:#fff;font-family:sans-serif}
     canvas{display:block;width:100%;height:100%;background:#bfe6ff}
@@ -15,6 +15,11 @@
     #dialog .choices{padding:0 14px 14px;display:flex;flex-direction:column;gap:8px}
     #dialog button{background:#182246;color:#e9ecff;border:1px solid #2d3b70;padding:10px 12px;border-radius:10px;cursor:pointer;text-align:left}
     #dialog button:hover{background:#1f2b57}
+    .overlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(6,10,20,.72);z-index:20;text-align:center;padding:20px}
+    .panel{background:#0f1426;border:1px solid #2c365e;border-radius:14px;padding:18px;text-align:center;max-width:min(680px,92%)}
+    .panel h1{margin:.2em 0;font-size:28px}
+    .panel p{opacity:.95}
+    .btn{background:#182246;color:#e9ecff;border:1px solid #2d3b70;padding:10px 14px;border-radius:10px;cursor:pointer;font-weight:700}
   </style>
 </head>
 <body>
@@ -28,6 +33,13 @@
     <div class="content" id="dlgText"></div>
     <div class="choices" id="dlgChoices"></div>
   </div>
+  <div id="endOL" class="overlay">
+    <div class="panel">
+      <h1>Ostend erreicht 🎉</h1>
+      <p id="endSummary">Zusammenfassung</p>
+      <button class="btn" id="btnRestart">Nochmal spielen</button>
+    </div>
+  </div>
 <script>
 (() => {
   const canvas=document.getElementById('game');
@@ -37,6 +49,9 @@
   const dialog=document.getElementById('dialog');
   const dlgText=document.getElementById('dlgText');
   const dlgChoices=document.getElementById('dlgChoices');
+  const endOL=document.getElementById('endOL');
+  const endSummary=document.getElementById('endSummary');
+  document.getElementById('btnRestart').onclick=()=>location.reload();
 
   const world={width:4400,height:canvas.height,groundY:460};
   const plats=[{x:0,y:world.groundY,w:1200,h:120},{x:1200,y:world.groundY,w:420,h:120},{x:1650,y:world.groundY,w:560,h:120},{x:2250,y:world.groundY,w:520,h:120},{x:2850,y:world.groundY,w:1400,h:120}];
@@ -98,15 +113,17 @@
     const lead=120*Math.sign(player.vx);const targetCam=Math.max(0,Math.min(world.width-canvas.width,player.x-canvas.width/2+lead));cameraX+=(targetCam-cameraX)*0.12;
 
     if(!dialogOpen){for(const tr of triggers){if(fired.has(tr.id))continue;const bx=tr.x,by=world.groundY-40,bw=40,bh=40;if(aabb(player,{x:bx,y:by,w:bw,h:bh})){openDialog(tr);break;}}}
-    if(aabb(player,goal)&&!gameEnded){gameEnded=true;alert('Ziel erreicht! 🎉');}
+    if(aabb(player,goal)&&!gameEnded){
+      gameEnded=true;
+      endSummary.textContent=`Geld: €${player.money} · Karma: ${player.karma}`;
+      endOL.style.display='flex';
+    }
   }
 
   function drawPlatforms(){for(const p of plats){ctx.fillStyle='#e6e2d3';ctx.fillRect(p.x-cameraX,p.y,p.w,p.h);ctx.fillStyle='#c9c3b1';ctx.fillRect(p.x-cameraX,p.y-4,p.w,4);}}
   function drawPlayer(){ctx.fillStyle='red';ctx.fillRect(player.x-cameraX,player.y,player.w,player.h);}
   function drawGoal(){const gx=goal.x-cameraX,gy=goal.y;ctx.fillStyle='#4dff88';ctx.fillRect(gx,gy,goal.w,goal.h);ctx.fillStyle='black';ctx.fillText('Ziel',gx+10,gy+35);}
-  function drawEventBlocks(t){
-    for(const tr of triggers){if(fired.has(tr.id))continue;const bx=tr.x-cameraX,by=world.groundY-40;const bob=Math.sin(t/420+tr.x)*4;ctx.fillStyle='#ffd24d';ctx.strokeStyle='#a07a1b';ctx.lineWidth=3;ctx.fillRect(bx,by+bob,40,40);ctx.strokeRect(bx,by+bob,40,40);ctx.fillStyle='#1b1b1b';ctx.font='bold 24px sans-serif';ctx.fillText('?',bx+12,by+28+bob);}
-  }
+  function drawEventBlocks(t){for(const tr of triggers){if(fired.has(tr.id))continue;const bx=tr.x-cameraX,by=world.groundY-40;const bob=Math.sin(t/420+tr.x)*4;ctx.fillStyle='#ffd24d';ctx.strokeStyle='#a07a1b';ctx.lineWidth=3;ctx.fillRect(bx,by+bob,40,40);ctx.strokeRect(bx,by+bob,40,40);ctx.fillStyle='#1b1b1b';ctx.font='bold 24px sans-serif';ctx.fillText('?',bx+12,by+28+bob);}}
 
   function render(ts){ctx.clearRect(0,0,canvas.width,canvas.height);ctx.fillStyle='#bfe6ff';ctx.fillRect(0,0,canvas.width,canvas.height);drawPlatforms();drawGoal();drawEventBlocks(ts||0);drawPlayer();}
 
