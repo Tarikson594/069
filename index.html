@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <title>Frankfurt Jump & Run – Iteration 6.0 (Mehrere Levels)</title>
+  <title>Frankfurt Jump & Run – Iteration 6.1 (Level-Hintergründe)</title>
   <style>
     body,html{margin:0;padding:0;height:100%;background:#0b0d14;color:#fff;font-family:sans-serif}
-    canvas{display:block;width:100%;height:100%;background:#bfe6ff}
+    canvas{display:block;width:100%;height:100%;}
     #hud{position:absolute;left:12px;top:12px;z-index:5;display:flex;gap:10px;align-items:center;background:rgba(10,15,30,.6);border:1px solid #263355;border-radius:10px;padding:6px 10px}
     #hud .badge{background:rgba(20,30,55,.7);border:1px solid #30426f;padding:4px 8px;border-radius:8px;font-weight:700}
     #dialog{position:absolute;left:50%;top:18%;transform:translateX(-50%);z-index:10;background:#0f152a;border:1px solid #2b3f72;border-radius:12px;display:none;max-width:min(760px,92vw)}
@@ -71,28 +71,28 @@
   let currentLevel=0;
 
   const levels=[
-    {name:'Bahnhofsviertel',plats:[{x:0,y:460,w:1200,h:120},{x:1300,y:460,w:900,h:120}],
+    {name:'Bahnhofsviertel',bg:'#1b0c2f',plats:[{x:0,y:460,w:1200,h:120},{x:1300,y:460,w:900,h:120}],
      triggers:[
        {id:'beggar',x:300,text:'„4 € nach Gießen… ehrlich!“',choices:[{label:'4 € geben',fn:()=>{money(-4);karma(+1);}},{label:'Ablehnen',fn:()=>karma(-1)}]},
        {id:'dealer',x:700,text:'Dealer: „Willst du was kaufen? (20 €)“',choices:[{label:'Kaufen',fn:()=>{money(-20);karma(-2);}},{label:'Nein danke',fn:()=>{}}]},
        {id:'taxi',x:1100,text:'Taxifahrer: „Kurzfahrt für 20 €?“',choices:[{label:'Einsteigen',fn:()=>money(-20)},{label:'Weiterlaufen',fn:()=>{}}]},
        {id:'club',x:1500,text:'Club-Promoter: „Techno-Event, Eintritt 15 €“',choices:[{label:'Rein da',fn:()=>money(-15)},{label:'Ablehnen',fn:()=>{}}]}
      ]},
-    {name:'Zeil',plats:[{x:0,y:460,w:1200,h:120},{x:1300,y:460,w:900,h:120}],
+    {name:'Zeil',bg:'#cce7ff',plats:[{x:0,y:460,w:1200,h:120},{x:1300,y:460,w:900,h:120}],
      triggers:[
        {id:'shopping',x:350,text:'Kollege: „Shopping, nur ein Shirt für 50 €?“',choices:[{label:'Kaufen',fn:()=>money(-50)},{label:'Nein',fn:()=>{}}]},
        {id:'flyer',x:700,text:'Flyer-Verteiler: „Bitte unterschreiben!“',choices:[{label:'Unterschreiben',fn:()=>karma(+1)},{label:'Ignorieren',fn:()=>karma(-1)}]},
        {id:'musician',x:1100,text:'Straßenmusiker: „Spende 2 €?“',choices:[{label:'Spenden',fn:()=>money(-2)},{label:'Vorbeigehen',fn:()=>{}}]},
        {id:'handy',x:1500,text:'Handyshop: „Neues Handy für 400 €?“',choices:[{label:'Kaufen (Game Over)',fn:()=>{money(-400);endGame(true);}},{label:'Nein',fn:()=>{}}]}
      ]},
-    {name:'Bornheim',plats:[{x:0,y:460,w:1200,h:120},{x:1300,y:460,w:900,h:120}],
+    {name:'Bornheim',bg:'#d9f0c7',plats:[{x:0,y:460,w:1200,h:120},{x:1300,y:460,w:900,h:120}],
      triggers:[
        {id:'aepler',x:350,text:'Nachbar: „Komm auf einen Äppler (5 €)“',choices:[{label:'Ja',fn:()=>money(-5)},{label:'Nein',fn:()=>{}}]},
        {id:'flohmarkt',x:700,text:'Flohmarkt: „Schallplatte für 10 €?“',choices:[{label:'Kaufen',fn:()=>money(-10)},{label:'Weitergehen',fn:()=>{}}]},
        {id:'hund',x:1100,text:'Hundebesitzer: „Kannst du auf Bello aufpassen?“',choices:[{label:'Ja',fn:()=>karma(+1)},{label:'Nein',fn:()=>karma(-1)}]},
        {id:'kneipe',x:1500,text:'Kneipenwirt: „Happy Hour! (8 €)“',choices:[{label:'Mitmachen',fn:()=>money(-8)},{label:'Weiter',fn:()=>{}}]}
      ]},
-    {name:'Mainufer',plats:[{x:0,y:460,w:1200,h:120},{x:1300,y:460,w:900,h:120}],
+    {name:'Mainufer',bg:'#99d9f2',plats:[{x:0,y:460,w:1200,h:120},{x:1300,y:460,w:900,h:120}],
      triggers:[
        {id:'jogger',x:350,text:'Jogger: „Spende für den Laufverein?“',choices:[{label:'Spenden 5 €',fn:()=>{money(-5);karma(+1)}},{label:'Nein',fn:()=>{}}]},
        {id:'biergarten',x:700,text:'Biergarten: „Radler 8 €?“',choices:[{label:'Ja',fn:()=>money(-8)},{label:'Nein',fn:()=>{}}]},
@@ -159,7 +159,7 @@
   function drawPlayer(){ctx.fillStyle='red';ctx.fillRect(player.x-cameraX,player.y,player.w,player.h);}
   function drawEventBlocks(t){for(const tr of levels[currentLevel].triggers){if(fired.has(tr.id))continue;const bx=tr.x-cameraX,by=world.groundY-40;const bob=Math.sin(t/420+tr.x)*4;ctx.fillStyle='#ffd24d';ctx.strokeStyle='#a07a1b';ctx.lineWidth=3;ctx.fillRect(bx,by+bob,40,40);ctx.strokeRect(bx,by+bob,40,40);ctx.fillStyle='#1b1b1b';ctx.font='bold 24px sans-serif';ctx.fillText('?',bx+12,by+28+bob);}}
 
-  function render(ts){ctx.clearRect(0,0,canvas.width,canvas.height);ctx.fillStyle='#bfe6ff';ctx.fillRect(0,0,canvas.width,canvas.height);drawPlatforms();drawEventBlocks(ts||0);drawPlayer();}
+  function render(ts){ctx.clearRect(0,0,canvas.width,canvas.height);ctx.fillStyle=levels[currentLevel].bg;ctx.fillRect(0,0,canvas.width,canvas.height);drawPlatforms();drawEventBlocks(ts||0);drawPlayer();}
 
   let last=0;function loop(ts){const dt=Math.min(0.033,(ts-last)/1000||0.016);last=ts;update(dt,ts);render(ts);requestAnimationFrame(loop);}requestAnimationFrame(loop);
 
